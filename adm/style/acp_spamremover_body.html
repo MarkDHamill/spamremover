@@ -1,0 +1,306 @@
+{% include 'overall_header.html' %}
+
+{% if S_ERROR %}
+<div class="errorbox">
+	<p>{{ ERROR_MSG }}</p>
+</div>
+{% endif %}
+
+{% if S_SETTINGS or not S_ERROR and not S_SUMMARY %}
+<form id="phpbbservices_spamremover_acp" name="phpbbservices_spamremover_acp" method="post" action="{{ U_ACTION }}">
+{% endif %}
+
+{% if S_SETTINGS %}
+<h1>{{ lang('ACP_SPAMREMOVER_SETTINGS') }}</h1>
+<p>{{ lang('ACP_SPAMREMOVER_SETTINGS_EXPLAIN') }}</p>
+{{ lang('ACP_SPAMREMOVER_SETTINGS_EXPLAIN_EXTRA') }}
+	<fieldset id="mainfieldset">
+		<legend>{{ lang('ACP_SPAMREMOVER_GENERAL_SETTINGS') }}</legend>
+		<dl>
+			<dt><label for="phpbbservices_spamremover_akismet_key">{{ lang('ACP_SPAMREMOVER_AKISMET_KEY') ~ lang('COLON') }}</label><br>{{ lang('ACP_SPAMREMOVER_AKISMET_KEY_EXPLAIN') }}</dt>
+			<dd><label><input type="text" class="text" id="phpbbservices_spamremover_akismet_key" name="phpbbservices_spamremover_akismet_key" value="{{ PHPBBSERVICES_SPAMREMOVER_AKISMET_KEY }}" size="12" maxlength="12"></label>
+		</dl>
+		<dl>
+			<dt><label for="phpbbservices_spamremover_batch_size">{{ lang('ACP_SPAMREMOVER_BATCH_SIZE') ~ lang('COLON') }}</label><br>{{ lang('ACP_SPAMREMOVER_BATCH_SIZE_EXPLAIN') }}</dt>
+			<dd><label><input type="number" id="phpbbservices_spamremover_batch_size" name="phpbbservices_spamremover_batch_size" value="{{ PHPBBSERVICES_SPAMREMOVER_BATCH_SIZE }}" min="1"></label>
+		</dl>
+		<dl>
+			<dt><label for="phpbbservices_spamremover_items_per_page">{{ lang('ACP_SPAMREMOVER_ITEMS_PER_PAGE') ~ lang('COLON') }}</label><br>{{ lang('ACP_SPAMREMOVER_ITEMS_PER_PAGE_EXPLAIN') }}</dt>
+			<dd><label><input type="number" id="phpbbservices_spamremover_items_per_page" name="phpbbservices_spamremover_items_per_page" value="{{ PHPBBSERVICES_SPAMREMOVER_ITEMS_PER_PAGE }}" min="1"></label>
+		</dl>
+	</fieldset>
+{% endif %}
+
+{% if S_FIND and not S_ERROR %}
+<h1>{{ lang('ACP_SPAMREMOVER_FIND_SPAM') }}</h1>
+<p>{{ lang('ACP_SPAMREMOVER_FIND_SPAM_EXPLAIN') }}</p>
+	<h2>{{ lang('ACP_SPAMREMOVER_SET_SEARCH_CRITERIA') }}</h2>
+	<fieldset id="postsfieldset">
+		<legend>{{ lang('ACP_SPAMREMOVER_POST_SETTINGS') }}</legend>
+		<dl>
+			<dt><label for="phpbbservices_spamremover_posts1">{{ lang('ACP_SPAMREMOVER_POSTS') }}</label></dt>
+			<dd><label><input type="radio" class="radio" id="phpbbservices_spamremover_posts1" name="phpbbservices_spamremover_posts" value="1"{% if PHPBBSERVICES_SPAMREMOVER_POSTS %} checked="checked"{% endif %} /> {{ lang('YES') }}</label>
+				<label><input type="radio" class="radio" id="phpbbservices_spamremover_posts2" name="phpbbservices_spamremover_posts" value="0"{% if not PHPBBSERVICES_SPAMREMOVER_POSTS %} checked="checked"{% endif %} /> {{ lang('NO') }}</label></dd>
+		</dl>
+		<dl>
+			<dt><label for="phpbbservices_spamremover_posts_start_date">{{ lang('ACP_SPAMREMOVER_POSTS_START_DATE') ~ lang('COLON') }}</label><br>{{ lang('ACP_SPAMREMOVER_POSTS_START_DATE_EXPLAIN') }}</dt>
+			<dd><label><input type="text" class="text" id="phpbbservices_spamremover_posts_start_date" name="phpbbservices_spamremover_posts_start_date" value="{{ PHPBBSERVICES_SPAMREMOVER_POSTS_START_DATE }}" size="10" maxlength="10" placeholder="YYYY-MM-DD"></label>
+		</dl>
+		<dl>
+			<dt><label for="phpbbservices_spamremover_posts_end_date">{{ lang('ACP_SPAMREMOVER_POSTS_END_DATE') ~ lang('COLON') }}</label><br>{{ lang('ACP_SPAMREMOVER_POSTS_END_DATE_EXPLAIN') }}</dt>
+			<dd><label><input type="text" class="text" name="phpbbservices_spamremover_posts_end_date" id="phpbbservices_spamremover_posts_end_date" value="{{ PHPBBSERVICES_SPAMREMOVER_POSTS_END_DATE }}" size="10" maxlength="10" placeholder="YYYY-MM-DD"></label>
+		</dl>
+		<dl>
+			<dt><label for="phpbbservices_spamremover_find_all_posts1">{{ lang('ACP_SPAMREMOVER_FIND_ALL_POSTS')}}</label><br>{{ lang('ACP_SPAMREMOVER_FIND_ALL_POSTS_EXPLAIN') }}</dt>
+			<dd><label><input type="radio" class="radio" id="phpbbservices_spamremover_find_all_posts1" name="phpbbservices_spamremover_find_all_posts" value="1"{% if PHPBBSERVICES_SPAMREMOVER_FIND_ALL_POSTS %} checked="checked"{% endif %} /> {{ lang('YES') }}</label>
+				<label><input type="radio" class="radio" id="phpbbservices_spamremover_find_all_posts2" name="phpbbservices_spamremover_find_all_posts" value="0"{% if not PHPBBSERVICES_SPAMREMOVER_FIND_ALL_POSTS %} checked="checked"{% endif %} /> {{ lang('NO') }}</label></dd>
+		</dl>
+	</fieldset>
+	<fieldset id="pmsfieldset">
+		<legend>{{ lang('ACP_SPAMREMOVER_PMS_SETTINGS') }}</legend>
+		<dl>
+			<dt><label for="phpbbservices_spamremover_pms1">{{ lang('ACP_SPAMREMOVER_PMS') }}</label></dt>
+			<dd><label><input type="radio" class="radio" id="phpbbservices_spamremover_pms1" name="phpbbservices_spamremover_pms" value="1"{% if PHPBBSERVICES_SPAMREMOVER_PMS %} checked="checked"{% endif %} /> {{ lang('YES') }}</label>
+				<label><input type="radio" class="radio" id="phpbbservices_spamremover_pms2" name="phpbbservices_spamremover_pms" value="0"{% if not PHPBBSERVICES_SPAMREMOVER_PMS %} checked="checked"{% endif %} /> {{ lang('NO') }}</label></dd>
+		</dl>
+		<dl>
+			<dt><label for="phpbbservices_spamremover_pms_start_date">{{ lang('ACP_SPAMREMOVER_PMS_START_DATE') ~ lang('COLON') }}</label><br>{{ lang('ACP_SPAMREMOVER_PMS_START_DATE_EXPLAIN') }}</dt>
+			<dd><label><input type="text" class="text" name="phpbbservices_spamremover_pms_start_date" id="phpbbservices_spamremover_pms_start_date" value="{{ PHPBBSERVICES_SPAMREMOVER_PMS_START_DATE }}" size="10" maxlength="10" placeholder="YYYY-MM-DD"></label>
+		</dl>
+		<dl>
+			<dt><label for="phpbbservices_spamremover_pms_end_date">{{ lang('ACP_SPAMREMOVER_PMS_END_DATE') ~ lang('COLON') }}</label><br>{{ lang('ACP_SPAMREMOVER_PMS_END_DATE_EXPLAIN') }}</dt>
+			<dd><label><input type="text" class="text" name="phpbbservices_spamremover_pms_end_date" id="phpbbservices_spamremover_pms_end_date" value="{{ PHPBBSERVICES_SPAMREMOVER_PMS_END_DATE }}" size="10" maxlength="10" placeholder="YYYY-MM-DD"></label>
+		</dl>
+		<dl>
+			<dt><label for="phpbbservices_spamremover_find_all_pms1">{{ lang('ACP_SPAMREMOVER_FIND_ALL_PMS')}}</label><br>{{ lang('ACP_SPAMREMOVER_FIND_ALL_PMS_EXPLAIN') }}</dt>
+			<dd><label><input type="radio" class="radio" id="phpbbservices_spamremover_find_all_pms1" name="phpbbservices_spamremover_find_all_pms" value="1"{% if PHPBBSERVICES_SPAMREMOVER_FIND_ALL_PMS %} checked="checked"{% endif %} /> {{ lang('YES') }}</label>
+				<label><input type="radio" class="radio" id="phpbbservices_spamremover_find_all_pms2" name="phpbbservices_spamremover_find_all_pms" value="0"{% if not PHPBBSERVICES_SPAMREMOVER_FIND_ALL_PMS %} checked="checked"{% endif %} /> {{ lang('NO') }}</label></dd>
+		</dl>
+	</fieldset>
+{% endif %}
+
+{% if S_SUMMARY and not S_ERROR %}
+<h1>{{ lang('ACP_SPAMREMOVER_SPAM_SUMMARY') }}</h1>
+<p>{{ lang('ACP_SPAMREMOVER_SPAM_SUMMARY_EXPLAIN') }}</p>
+<table id="summary">
+	<thead>
+	<tr>
+		<th>{{ lang('ACP_SPAMREMOVER_SPAM_TYPE') }}</th>
+		<th class="center">{{ lang('ACP_SPAMREMOVER_HAM') }}</th>
+		<th class="center">{{ lang('ACP_SPAMREMOVER_SPAM') }}</th>
+		<th class="center">{{ lang('ACP_SPAMREMOVER_BLATANT_SPAM') }}</th>
+	</tr>
+	</thead>
+	<tbody>
+	<tr class="row1">
+		<th>{{ lang('POSTS') }}</th>
+		<td style="text-align:center;">{{ ACP_SPAMREMOVER_POSTS_HAM }}</td>
+		<td style="text-align:center;">{{ ACP_SPAMREMOVER_POSTS_SPAM }}</td>
+		<td style="text-align:center;">{{ ACP_SPAMREMOVER_POSTS_BLATANT_SPAM }}</td>
+	</tr>
+	<tr class="row2">
+		<th>{{ lang('PRIVATE_MESSAGES') }}</th>
+		<td style="text-align:center;">{{ ACP_SPAMREMOVER_MSGS_HAM }}</td>
+		<td style="text-align:center;">{{ ACP_SPAMREMOVER_MSGS_SPAM }}</td>
+		<td style="text-align:center;">{{ ACP_SPAMREMOVER_MSGS_BLATANT_SPAM }}</td>
+	</tr>
+	</tbody>
+</table>
+{% endif %}
+
+{% if S_DETAIL_POSTS and not S_ERROR %}
+<h1>{{ lang('ACP_SPAMREMOVER_SPAM_DETAIL_POSTS') }}</h1>
+<p>{{ lang('ACP_SPAMREMOVER_SPAM_DETAIL_POSTS_EXPLAIN') }}</p>
+<div class="pagination">
+	{% if loops.pagination|length %}
+	{% INCLUDE 'pagination.html' %}
+	{% endif %}
+</div>
+<table id="spam">
+	<col style="width:75px;">
+	<col style="width:150px;">
+	<col style="width:100px;">
+	<col style="width:75px;">
+	<col>
+	<col>
+	<col style="width:150px;">
+	<col style="width:150px;">
+	<col>
+	<col style="width:75px;">
+	<thead>
+	<tr>
+		<th>{{ lang('ACP_SPAMREMOVER_POST_ID') }}</th>
+		<th>{{ lang('ACP_SPAMREMOVER_POST_TIME') }}</th>
+		<th>{{ lang('ACP_SPAMREMOVER_POSTER') }}</th>
+		<th>{{ lang('ACP_SPAMREMOVER_AKISMET_RESULT') }}</th>
+		<th>{{ lang('ACP_SPAMREMOVER_IS_FIRST_POST') }}</th>
+		<th>{{ lang('ACP_SPAMREMOVER_TOPIC_REPLIES') }}</th>
+		<th>{{ lang('FORUM') }}</th>
+		<th>{{ lang('TOPIC') }}</th>
+		<th>{{ lang('ACP_SPAMREMOVER_POST_TEXT') }}</th>
+		<th>{{ lang('ACP_SPAMREMOVER_MARK') }}</th>
+	</tr>
+	</thead>
+	<tbody>
+	{% for post in posts %}
+	{% if post.S_ROW_COUNT is even %}<tr class="row1">{% else %}<tr class="row2">{% endif %}
+		<td>{{ post.POST_ID }}</td>
+		<td>{{ post.POST_TIME }}</td>
+		<td>{{ post.POSTER }}</td>
+		<td>{{ post.AKISMET }}</td>
+		<td>{{ post.IS_FIRST_POST}}</td>
+		<td>{{ post.TOPIC_REPLIES }}</td>
+		<td>{{ post.FORUM_NAME }}</td>
+		<td>{{ post.TOPIC_TITLE }}</td>
+		<td>{{ post.POST_TEXT }}</td>
+		<td style="text-align:center;"><input type="checkbox" name="p-{{ post.MARK }}"></td>
+	</tr>
+	{% endfor %}
+	</tbody>
+</table>
+<div class="pagination">
+	{% if loops.pagination|length %}
+	{% INCLUDE 'pagination.html' %}
+	{% endif %}
+</div>
+<fieldset class="quick">
+	<p class="small"><a href="#" onclick="marklist('phpbbservices_spamremover_acp', 'p-', true);">{{ lang('MARK_ALL') }}</a> &bull; <a href="#" onclick="marklist('phpbbservices_spamremover_acp', 'p-', false);">{{ lang('UNMARK_ALL') }}</a></p>
+</fieldset>
+<fieldset class="display-options">
+	<label for="spamtype">{{ lang('ACP_SPAMREMOVER_SHOW') }}{{ lang('COLON') }}</label>
+	<select id="spamtype" name="spamtype">
+		<option value="a"{{ ACP_SPAMREMOVER_ALL_SELECTED }}>{{ lang('ACP_SPAMREMOVER_ALL') }}</option>
+		<option value="p"{{ ACP_SPAMREMOVER_SPAM_SELECTED }}>{{ lang('ACP_SPAMREMOVER_SPAM') }}</option>
+		<option value="b"{{ ACP_SPAMREMOVER_BLATANT_SPAM_SELECTED }}>{{ lang('ACP_SPAMREMOVER_BLATANT_SPAM') }}</option>
+	</select>&nbsp;
+	<label for="sortby">{{ lang('ACP_SPAMREMOVER_SORT_BY') }}{{ lang('COLON') }}</label>
+	<select id="sortby" name="sortby">
+		<option value="p"{{ ACP_SPAMREMOVER_POST_TIME_SELECTED }}>{{ lang('ACP_SPAMREMOVER_POST_TIME') }}</option>
+		<option value="t"{{ ACP_SPAMREMOVER_TOPIC_SELECTED }}>{{ lang('TOPIC') }}</option>
+		<option value="b"{{ ACP_SPAMREMOVER_BOARD_SELECTED }}>{{ lang('ACP_SPAMREMOVER_BOARD_ORDER') }}</option>
+	</select>&nbsp;
+	<label for="sortorder">{{ lang('ACP_SPAMREMOVER_SORT_ORDER') }}{{ lang('COLON') }}</label>
+	<select id="sortorder" name="sortorder">
+		<option value="a"{{ ACP_SPAMREMOVER_ASCENDING_SELECTED }}>{{ lang('ASCENDING') }}</option>
+		<option value="d"{{ ACP_SPAMREMOVER_DESCENDING_SELECTED }}>{{ lang('DESCENDING') }}</option>
+	</select>&nbsp;
+</fieldset>
+{% endif %}
+
+{% if S_DETAIL_PMS and not S_ERROR %}
+<h1 id="spam_details2">{{ lang('ACP_SPAMREMOVER_SPAM_DETAIL_PMS') }}</h1>
+<p>{{ lang('ACP_SPAMREMOVER_SPAM_DETAIL_PMS_EXPLAIN') }}</p>
+<div class="pagination">
+	{% if loops.pagination|length %}
+	{% INCLUDE 'pagination.html' %}
+	{% endif %}
+</div>
+<table id="spam2">
+	<col style="width:75px;">
+	<col style="width:150px;">
+	<col style="width:100px;">
+	<col style="width:100px;">
+	<col>
+	<col>
+	<col style="width:75px;">
+	<thead>
+	<tr>
+		<th>{{ lang('ACP_SPAMREMOVER_MSG_ID') }}</th>
+		<th>{{ lang('ACP_SPAMREMOVER_MSG_TIME') }}</th>
+		<th>{{ lang('AUTHOR') }}</th>
+		<th>{{ lang('ACP_SPAMREMOVER_AKISMET_RESULT') }}</th>
+		<th>{{ lang('SUBJECT') }}</th>
+		<th>{{ lang('ACP_SPAMREMOVER_MSG_TEXT') }}</th>
+		<th>{{ lang('ACP_SPAMREMOVER_MARK') }}</th>
+	</tr>
+	</thead>
+	<tbody>
+	{% for pm in pms %}
+	{% if pm.S_ROW_COUNT is even %}<tr class="row1">{% else %}<tr class="row2">{% endif %}
+		<td>{{ pm.MSG_ID }}</td>
+		<td>{{ pm.MESSAGE_TIME }}</td>
+		<td>{{ pm.FROM }}</td>
+		<td>{{ pm.AKISMET }}</td>
+		<td>{{ pm.MESSAGE_SUBJECT }}</td>
+		<td>{{ pm.MESSAGE_TEXT }}</td>
+		<td style="text-align:center;"><input type="checkbox" name="m-{{ pm.MARK }}"></td>
+	</tr>
+	{% endfor %}
+	</tbody>
+</table>
+<div class="pagination">
+	{% if loops.pagination|length %}
+	{% INCLUDE 'pagination.html' %}
+	{% endif %}
+</div>
+<fieldset class="quick">
+	<p class="small"><a href="#" onclick="marklist('phpbbservices_spamremover_acp', 'm-', true);">{{ lang('MARK_ALL') }}</a> &bull; <a href="#" onclick="marklist('phpbbservices_spamremover_acp', 'm-', false);">{{ lang('UNMARK_ALL') }}</a></p>
+</fieldset>
+<fieldset class="display-options">
+	<label for="spamtype">{{ lang('ACP_SPAMREMOVER_SHOW') }}{{ lang('COLON') }}</label>
+	<select id="spamtype" name="spamtype">
+		<option value="a"{{ ACP_SPAMREMOVER_ALL_SELECTED }}>{{ lang('ACP_SPAMREMOVER_ALL') }}</option>
+		<option value="p"{{ ACP_SPAMREMOVER_SPAM_SELECTED }}>{{ lang('ACP_SPAMREMOVER_SPAM') }}</option>
+		<option value="b"{{ ACP_SPAMREMOVER_BLATANT_SPAM_SELECTED }}>{{ lang('ACP_SPAMREMOVER_BLATANT_SPAM') }}</option>
+	</select>&nbsp;
+	<label for="sortby">{{ lang('ACP_SPAMREMOVER_SORT_BY') }}{{ lang('COLON') }}</label>
+	<select id="sortby" name="sortby">
+		<option value="a"{{ ACP_SPAMREMOVER_AUTHOR_SELECTED }}>{{ lang('ACP_SPAMREMOVER_AUTHOR') }}</option>
+		<option value="m"{{ ACP_SPAMREMOVER_MESSAGE_TIME_SELECTED }}>{{ lang('ACP_SPAMREMOVER_MSG_TIME') }}</option>
+	</select>&nbsp;
+	<label for="sortorder">{{ lang('ACP_SPAMREMOVER_SORT_ORDER') }}{{ lang('COLON') }}</label>
+	<select id="sortorder" name="sortorder">
+		<option value="a"{{ ACP_SPAMREMOVER_ASCENDING_SELECTED }}>{{ lang('ASCENDING') }}</option>
+		<option value="d"{{ ACP_SPAMREMOVER_DESCENDING_SELECTED }}>{{ lang('DESCENDING') }}</option>
+	</select>&nbsp;
+</fieldset>
+{% endif %}
+
+{% if S_REMOVE_SEL and not S_ERROR %}
+<h1>{{ lang('ACP_SPAMREMOVER_SELECTIVELY_REMOVE_SPAM') }}</h1>
+<p>{{ lang('ACP_SPAMREMOVER_SELECTIVELY_REMOVE_SPAM_EXPLAIN') }}</p>
+{% endif %}
+
+{% if S_REMOVE_BULK and not S_ERROR %}
+<h1>{{ lang('ACP_SPAMREMOVER_BULK_REMOVE_SPAM') }}</h1>
+<p>{{ lang('ACP_SPAMREMOVER_BULK_REMOVE_SPAM_EXPLAIN') }}</p>
+{{ lang('ACP_SPAMREMOVER_BULK_REMOVE_SPAM_EXPLAIN_EXTRA') }}
+<fieldset id="mode">
+	<dl>
+		<dt><label for="phpbbservices_spamremover_proceed1">{{ lang('ACP_SPAMREMOVER_PERMANENTLY_REMOVE') }}</label><br>{{ lang('ACP_SPAMREMOVER_PERMANENTLY_REMOVE_EXPLAIN') }}</dt>
+		<dd><label><input type="radio" class="radio" id="phpbbservices_spamremover_proceed1" name="phpbbservices_spamremover_proceed" value="1" /> {{ lang('YES') }}</label>
+			<label><input type="radio" class="radio" id="phpbbservices_spamremover_proceed2" name="phpbbservices_spamremover_proceed" value="0" checked="checked" /> {{ lang('NO') }}</label></dd>
+	</dl>
+	<dl>
+		<dt><label for="phpbbservices_spamremover_blatant_only1">{{ lang('ACP_SPAMREMOVER_REMOVE_ONLY_BLATANT_SPAM') }}</label><br>{{ lang('ACP_SPAMREMOVER_REMOVE_ONLY_BLATANT_SPAM_EXPLAIN') }}</dt>
+		<dd><label><input type="radio" class="radio" id="phpbbservices_spamremover_blatant_only1" name="phpbbservices_spamremover_blatant_only" value="1"{% if PHPBBSERVICES_SPAMREMOVER_BLATANT_ONLY %} checked="checked"{% endif %} /> {{ lang('YES') }}</label>
+			<label><input type="radio" class="radio" id="phpbbservices_spamremover_blatant_only2" name="phpbbservices_spamremover_blatant_only" value="0"{% if not PHPBBSERVICES_SPAMREMOVER_BLATANT_ONLY %} checked="checked"{% endif %} /> {{ lang('NO') }}</label></dd>
+	</dl>
+</fieldset>
+{% endif %}
+
+{% if S_RESET and not S_ERROR %}
+<h1>{{ lang('ACP_SPAMREMOVER_RESET') }}</h1>
+
+	<fieldset id="reset_spam">
+	<dl>
+		<dt><label for="phpbbservices_spamremover_reset1">{{ lang('ACP_SPAMREMOVER_RESET')}}</label><br>{{ lang('ACP_SPAMREMOVER_RESET_EXPLAIN') }}</dt>
+		<dd><label><input type="radio" class="radio" id="phpbbservices_spamremover_reset1" name="phpbbservices_spamremover_reset" value="1" /> {{ lang('YES') }}</label>
+			<label><input type="radio" class="radio" id="phpbbservices_spamremover_reset2" name="phpbbservices_spamremover_reset" value="0" checked="checked" /> {{ lang('NO') }}</label></dd>
+	</dl>
+	</fieldset>
+
+{% endif %}
+
+{% if S_SETTINGS or not S_ERROR and not S_SUMMARY %}
+<fieldset class="submit-buttons">
+	<input class="button1" type="submit" id="submit" name="submit" value="{% if S_FIND %}{{ lang('ACP_SPAMREMOVER_FIND_SPAM') }}{% else %}{{ lang('SUBMIT') }}{% endif %}">
+	<input class="button2" type="reset" id="reset" name="reset" value="{{ lang('RESET') }}">
+	<input type="hidden" name="phpbbservices_spamremover_akismet_action" id="phpbbservices_spamremover_akismet_action" value="c">
+	{{ S_FORM_TOKEN }}
+</fieldset>
+</form>
+
+{% endif %}
+
+{% include 'overall_footer.html' %}

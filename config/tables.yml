@@ -1,0 +1,2 @@
+parameters:
+    phpbbservices.spamremover.tables.spamremover_table: '%core.table_prefix%spam_found'

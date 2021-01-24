@@ -1,0 +1,19 @@
+input[type="number"] {
+	text-align: right;
+	width: 5em !important;
+}
+.center {
+	text-align: center;
+	min-width: 100px;
+}
+#collapse-expand {float: right;}
+hr {margin-top: 25px;}
+li {
+	font-size: 0.9em;
+	list-style-position: outside;
+	line-height: 1.40em;
+}
+#spam_summary, #spam_details {margin-bottom: 20px;}
+#summary {width: 500px;}
+table {width:auto;}
+td {word-break: break-word;}

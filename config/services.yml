@@ -1,0 +1,19 @@
+imports:
+    - { resource: tables.yml }
+
+services:
+    phpbbservices.spamremover.controller.acp:
+        class: phpbbservices\spamremover\controller\acp_controller
+        arguments:
+            - '@config'
+            - '@language'
+            - '@log'
+            - '@request'
+            - '@template'
+            - '@user'
+            - '@dbal.conn'
+            - '%core.php_ext%'
+            - '%core.root_path%'
+            - '@service_container'
+            - '%core.table_prefix%'
+            - '%phpbbservices.spamremover.tables.spamremover_table%'

@@ -1,0 +1,17 @@
+{% if S_INCLUDE_SR_CSS %}
+	{# Includes ACP - CSS #}
+	{% INCLUDECSS '@phpbbservices_spamremover/acp_spamremover.css' %}
+	{% if S_FIND and not S_ERROR %}
+		{% if not definition.INCLUDED_JQUERYUI1121CSS %}
+			{% INCLUDECSS '@phpbbservices_spamremover/jquery-ui-1.12.1.min.css' %}
+			{% DEFINE INCLUDED_JQUERYUI1121CSS = true %}
+		{% endif %}
+	{% endif %}
+{% endif %}
+{# Includes ACP - JS #}
+{% if S_FIND and not S_ERROR %}
+	{% if not definition.INCLUDED_JQUERYUI1121JS %}
+		{% INCLUDEJS '@phpbbservices_spamremover/jquery-ui-1.12.1.min.js' %}
+		{% DEFINE INCLUDED_JQUERYUI1121JS = true %}
+	{% endif %}
+{% endif %}
