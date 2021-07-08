@@ -14,14 +14,17 @@ class ext extends \phpbb\extension\base
 {
 	public function is_enableable()
 	{
-		if (!extension_loaded('sockets'))
+
+		$config = $this->container->get('config');
+		$language = $this->container->get('language');
+		$language->add_lang(array('common'), 'phpbbservices/spamremover');
+
+		if (
+			phpbb_version_compare($config['version'], '3.3.0', '<') ||
+			phpbb_version_compare($config['version'], '4.0', '>=') ||
+			!extension_loaded('sockets'))
 		{
-			$language = $this->container->get('language');
-			$language->add_lang(array('common'), 'phpbbservices/spamremover');
-			$message_type = E_USER_WARNING;
-			$message = $language->lang('ACP_SPAMREMOVER_INSTALL_REQUIREMENTS');
-			trigger_error($message, $message_type);
-			return false;
+			return $language->lang('ACP_SPAMREMOVER_INSTALL_REQUIREMENTS');
 		}
 		else
 		{

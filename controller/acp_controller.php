@@ -23,7 +23,6 @@ class acp_controller
 	protected $language;
 	protected $log;
 	protected $pagination;
-	protected $phpbb_container;
 	protected $phpbb_root_path;
 	protected $phpEx;
 	protected $request;
@@ -41,10 +40,10 @@ class acp_controller
 	const BLATANT_SPAM = 1;
 	const HAM = 2;
 
-	const EXT_VERSION = '1.0.0-dev'; // Change this for every release since version in composer.json cannot be read but Akismet requires a version of the app in its calls.
+	const EXT_VERSION = '1.0.1'; // Change this for every release since the version in composer.json cannot be read but Akismet requires a version of the app in its calls.
 
 	const SIMULATION_MODE = false;	// Normally set to false, when true will simulate an Akismet spam response by randomly assigning a spam status
-	const TEST_MODE = false;		// Normally set to false, when true this facilitates testing and keeps a lot of "commit"-like action from happening to the database and on Akismet servers
+	const TEST_MODE = false;		// Normally set to false, when true this facilitates testing and keeps a lot of commit-like action from happening to the database and on Akismet servers
 
 	/**
 	 * Constructor.
@@ -58,21 +57,19 @@ class acp_controller
 	 * @param \phpbb\db\driver\factory 		$db 				The database factory object
 	 * @param string						$php_ext 			PHP file suffix
 	 * @param string 						$phpbb_root_path 	Relative path to phpBB root
-	 * @param ContainerInterface 			$phpbb_container 	Container
 	 * @param string						$table_prefix 		Prefix for phpbb's database tables
 	 * @param \phpbbservices\spamremover\	$spam_found_table	Extension's spam found table
+	 * @param \phpbb\pagination 			$pagination			Pagination object
 	 *
 	 */
-	public function __construct(\phpbb\config\config $config, \phpbb\language\language $language, \phpbb\log\log $log, \phpbb\request\request $request, \phpbb\template\template $template, \phpbb\user $user, \phpbb\db\driver\factory $db, $php_ext, $phpbb_root_path, ContainerInterface $phpbb_container, $table_prefix, $spam_found_table)
+	public function __construct(\phpbb\config\config $config, \phpbb\language\language $language, \phpbb\log\log $log, \phpbb\request\request $request, \phpbb\template\template $template, \phpbb\user $user, \phpbb\db\driver\factory $db, $php_ext, $phpbb_root_path, $table_prefix, $spam_found_table, \phpbb\pagination $pagination)
 	{
 		// Connect the services
-		$this->phpbb_container 	= $phpbb_container;
-
 		$this->config			= $config;
 		$this->db				= $db;
 		$this->language			= $language;
 		$this->log				= $log;
-		$this->pagination 		= $this->phpbb_container->get('pagination');
+		$this->pagination 		= $pagination;
 		$this->phpbb_root_path 	= $phpbb_root_path;
 		$this->phpEx			= $php_ext;
 		$this->request			= $request;
@@ -81,7 +78,7 @@ class acp_controller
 		$this->template			= $template;
 		$this->user				= $user;
 
-		// Assign private variables
+		// Set private variables
 		$this->board_url 		= $this->board_url = generate_board_url() . '/';
 		$this->user_agent 		= 'phpBB/' . $this->config['version'] . ' | spamremover/' . SELF::EXT_VERSION;	// Akismet requires an agent when calling its service.
 	}
@@ -101,7 +98,7 @@ class acp_controller
 		include($this->phpbb_root_path . 'includes/functions_privmsgs.' . $this->phpEx);
 		include($this->phpbb_root_path . 'includes/functions_user.' . $this->phpEx);
 
-		// Add our common language files
+		// Add our common language file
 		$this->language->add_lang('common', 'phpbbservices/spamremover');
 
 		// Create a form key for preventing CSRF attacks
@@ -148,7 +145,7 @@ class acp_controller
 				if ($mode === 'find')
 				{
 
-					// Actual finding of spam posts happens elsewhere since they can also occur as a result of a HTTP GET request.
+					// Actually finding spam posts happens elsewhere since they can also occur as a result of a HTTP GET request.
 					// So here we only save the values in the form fields to the database.
 					$this->config->set('phpbbservices_spamremover_find_all_pms', (int) $this->request->variable('phpbbservices_spamremover_find_all_pms', 0));
 					$this->config->set('phpbbservices_spamremover_find_all_posts', (int) $this->request->variable('phpbbservices_spamremover_find_all_posts', 0));
@@ -167,8 +164,9 @@ class acp_controller
 				if ($mode === 'detail_posts')
 				{
 
-					// Report any checked posts as ham and unmark them as spam. Checkboxes are passed as post variable only if they are checked.
+					// Report any checked posts as ham and unmark them as spam. Checkboxes are passed as post variables only if they are checked.
 					$request_vars = $this->request->get_super_global(\phpbb\request\request_interface::POST);
+
 					foreach ($request_vars as $name => $value)
 					{
 						if (substr($name, 0, 2) == 'p-')    // Row for post is checked, so it was flagged as ham.
@@ -178,9 +176,10 @@ class acp_controller
 							// Report the post as ham to Akismet and remove it from the database
 							$sql_ary = array(
 								'SELECT' => 'post_id, post_time, poster_ip, poster_id, post_username, post_text, username, 
-												user_email, enable_bbcode, 	enable_smilies, enable_magic_url, user_sig_bbcode_uid, 
-												user_sig_bbcode_bitfield, topic_title, forum_name, user_dateformat, topic_first_post_id,
-												topic_posts_approved, topic_posts_unapproved, topic_posts_softdeleted',
+												user_email, enable_bbcode, 	enable_smilies, enable_magic_url, topic_title, 
+												forum_name, user_dateformat, topic_first_post_id, topic_posts_approved, 
+												topic_posts_unapproved, topic_posts_softdeleted, p.forum_id, t.topic_id, 
+												bbcode_uid, bbcode_bitfield',
 								'FROM' => array(
 												POSTS_TABLE  => 'p',
 												USERS_TABLE  => 'u',
@@ -219,7 +218,6 @@ class acp_controller
 											  'blog_lang'            => $this->config['default_lang'],
 											  'blog_charset'         => 'UTF-8',
 								);
-
 								$this->akismet_submit_ham($this->config['phpbbservices_spamremover_akismet_key'], $data);
 
 								// Remove the row from the phpbb_spam_found table as it was judged not to be spam
@@ -235,7 +233,7 @@ class acp_controller
 					$this->log->add('admin', $this->user->data['user_id'], $this->user->ip, 'LOG_ACP_SPAMREMOVER_SPAM_POSTS_DETAILS_RAN');
 
 					// Option settings have been updated and logged. Confirm this to the user and provide link back to previous page.
-					meta_refresh(1, $this->u_action);	// Check private messages next
+					meta_refresh(3, $this->u_action);	// Check private messages next
 					trigger_error($this->language->lang('ACP_SPAMREMOVER_HAM_POSTS_REPORTED'));
 
 				}
@@ -254,9 +252,8 @@ class acp_controller
 
 							// Report the private message as ham to Akismet and remove it from the database
 							$sql_ary = array(
-								'SELECT' => "m.msg_id, message_time, author_ip, m.author_id, message_text, u.username AS 'from', 
-										u.user_email, enable_bbcode, enable_smilies, enable_magic_url, u.user_sig_bbcode_uid, 
-										u.user_sig_bbcode_bitfield, message_subject, u.user_dateformat",
+								'SELECT' => "m.msg_id, message_time, author_ip, m.author_id, message_text, bbcode_uid, bbcode_bitfield, u.username AS 'from', 
+										u.user_email, enable_bbcode, enable_smilies, enable_magic_url, message_subject, u.user_dateformat",
 								'FROM' => array(
 										PRIVMSGS_TABLE  => 'm',
 										USERS_TABLE  => 'u'),
@@ -305,7 +302,7 @@ class acp_controller
 					$this->log->add('admin', $this->user->data['user_id'], $this->user->ip, 'LOG_ACP_SPAMREMOVER_SPAM_PMS_DETAILS_RAN');
 
 					// Option settings have been updated and logged. Confirm this to the user and provide link back to previous page.
-					meta_refresh(1, $this->u_action);	// Check private messages next
+					meta_refresh(3, $this->u_action);
 					trigger_error($this->language->lang('ACP_SPAMREMOVER_HAM_PMS_REPORTED'));
 
 				}
@@ -337,7 +334,7 @@ class acp_controller
 					$sql_ary = array(
 						'SELECT' 	=> 'post_id',
 						'FROM' 		=> array(
-							POSTS_TABLE  		=> 'p',
+							POSTS_TABLE  => 'p',
 							$this->spam_found_table	=> 's'),
 						'WHERE'		=> 'is_post = 1 AND p.post_id = s.post_msg_id' . $blatant_only_sql);
 					$sql = $this->db->sql_build_query('SELECT', $sql_ary);
@@ -389,6 +386,7 @@ class acp_controller
 					$result = $this->db->sql_query($sql);
 					$rowset = $this->db->sql_fetchrowset($result);
 					$pms_to_remove = count($rowset);
+
 					foreach ($rowset as $row)
 					{
 						// Use a transaction. If we abruptly run out of resources, we want the database to be consistent.
@@ -481,6 +479,13 @@ class acp_controller
 			{
 				$num_posts = $this->config['num_posts'];
 
+				// Estimate the time to check all posts. Based on testing, Akismet can test about 4 posts per second.
+				$est_post_seconds = round($num_posts/4);
+				$post_hrs = floor($est_post_seconds/3600);
+				$est_post_seconds = ($post_hrs != 0) ? $est_post_seconds % ($post_hrs * 3600) : $est_post_seconds;
+				$post_min = floor($est_post_seconds/60);
+				$post_sec = ($post_min != 0) ? $est_post_seconds % ($post_min * 60) : $est_post_seconds;
+
 				// Get private message count
 				$sql = 'SELECT count(*) as pms_count
 						FROM ' . PRIVMSGS_TABLE . ' m';
@@ -488,18 +493,11 @@ class acp_controller
 				$num_pms = $this->db->sql_fetchfield('pms_count');
 				$this->db->sql_freeresult($result);
 
-				// Estimate the time to check all posts. Based on testing, Akismet can test about 4 posts per second.
-				$est_post_seconds = round($num_posts/4);
-				$post_hrs = floor($est_post_seconds / 3600);
-				$est_post_seconds = ($post_hrs != 0) ? $est_post_seconds % ($post_hrs * 3600) : $est_post_seconds;
-				$post_min = floor($est_post_seconds / 60);
-				$post_sec = ($post_min != 0) ? $est_post_seconds % ($post_min * 60) : $est_post_seconds;
-
 				// Estimate the time to check all private messages. Based on testing, Akismet can test about 4 private messages per second.
 				$est_pms_seconds = round($num_pms/4);
-				$pms_hrs = floor($est_pms_seconds / 3600);
+				$pms_hrs = floor($est_pms_seconds/3600);
 				$est_pms_seconds = ($pms_hrs != 0) ? $est_pms_seconds % ($pms_hrs * 3600) : $est_pms_seconds;
-				$pms_min = floor($est_pms_seconds / 60);
+				$pms_min = floor($est_pms_seconds/60);
 				$pms_sec = ($pms_min != 0) ? $est_pms_seconds % ($pms_min * 60) : $est_pms_seconds;
 
 				// Populate the form fields with current values in the database
@@ -524,10 +522,16 @@ class acp_controller
 				));
 			}
 
-			// The following redirect logic looks unweildy, but trust me it's the only thing I could get to work properly.
+			// The following redirect logic looks unwieldy, but trust me, it's the only thing I could get to work properly. Both posts
+			// and private messages potentially are checked which involves different queries. How long it takes to check all posts and
+			// private message for spam (or some subset of each) is indeterminate and is based on the amount of this content.
+			// Consequently, this extension will process a batch at a time before things are likely to time out, by repeatedly calling
+			// either find_spam_posts() or find_spam_pms() based on how far along we are in the process. URL parameters are used to
+			// indicate the current state and what to do next.
+
 			if ($find_type === 'none' && $this->request->is_set_post('submit') && !((bool) $this->config['phpbbservices_spamremover_posts']))
 			{
-				// Don't find posts on initial form submittal
+				// Don't find posts on initial form submittal, check private messages?
 				if (!((bool) $this->config['phpbbservices_spamremover_pms']))
 				{
 					// Also don't find private messages, so there's nothing to do
@@ -540,27 +544,31 @@ class acp_controller
 					$this->find_spam_pms();	// This function redirects
 				}
 			}
+
 			if ($find_type === 'none' && $this->request->is_set_post('submit') && (bool) $this->config['phpbbservices_spamremover_posts'] && !((bool) $this->config['phpbbservices_spamremover_pms']))
 			{
 				// Don't find private messages on initial form submit, but do find posts, so find posts only
 				$this->find_spam_posts();	// This function redirects
 			}
+
+			// Initial form submitted logic starts here
 			if ($find_type === 'posts')
 			{
 				// This is executed through a trigger_error call only (GET request), basically after the first batch of posts have been checked but there are still more to test.
 				$this->find_spam_posts();	// This function redirects
 			}
+
 			if ($find_type === 'pms')
 			{
 				// This is executed through by a trigger_error call only (GET request), basically after the first batch of private messages have been checked but there are still more to test.
 				$this->find_spam_pms();	// This function redirects
 			}
 
-			// Initial form submittal logic occurs here only if both posts and private messages should be scanned for spam. Posts are checked before private
+			// Initial form submittal logic occurs here only if both posts and private messages should be scanned for spam ($find_type == 'none'). Posts are checked before private
 			// messages so start by finding spam posts.
 			if ($this->request->is_set_post('submit'))
 			{
-				$this->find_spam_posts();
+				$this->find_spam_posts();	// This function redirects
 			}
 
 		}
@@ -573,14 +581,14 @@ class acp_controller
 				'S_SUMMARY'								=> true,
 			));
 
-			// This array facilitates showing counts for spam types that may not be returned by the query
+			// This array facilitates showing counts for spam types that may not be returned if a query returns no rows
 			$posts_row = array(SELF::HAM => 0, SELF::SPAM => 0, SELF::BLATANT_SPAM => 0);
 
 			// Determine the date range, if any, of the posts to check for spam
 			$start_date_str = trim($this->config['phpbbservices_spamremover_posts_start_date']);
 			$end_date_str = trim($this->config['phpbbservices_spamremover_posts_end_date']);
 
-			// Create the SQL to find the correct posts to check
+			// Create the SQL condition to find the correct posts to check for spam
 			if ($start_date_str == '' && $end_date_str == '')
 			{
 				$date_range = '';
@@ -644,7 +652,7 @@ class acp_controller
 				)
 			);
 
-			// This array facilitates showing counts for spam types that may not be returned by the query
+			// This array facilitates showing counts for spam types that may not be returned if a query returns no rows
 			$pms_row = array(SELF::HAM => 0, SELF::SPAM => 0, SELF::BLATANT_SPAM => 0);
 
 			// Determine total number of private messages that need to be checked
@@ -740,12 +748,12 @@ class acp_controller
 			// Page filtering and sorting controls
 			$this->template->assign_vars(array(
 				'ACP_SPAMREMOVER_ALL_SELECTED'			=> ($spamtype == 'a') ? ' selected="selected"' : '',
-				'ACP_SPAMREMOVER_SPAM_SELECTED'			=> ($spamtype == 'p') ? ' selected="selected"' : '',
 				'ACP_SPAMREMOVER_BLATANT_SPAM_SELECTED'	=> ($spamtype == 'b') ? ' selected="selected"' : '',
+				'ACP_SPAMREMOVER_SPAM_SELECTED'			=> ($spamtype == 'p') ? ' selected="selected"' : '',
 
-				'ACP_SPAMREMOVER_TOPIC_SELECTED'		=> ($sortby == 't') ? ' selected="selected"' : '',
-				'ACP_SPAMREMOVER_POST_TIME_SELECTED'	=> ($sortby == 'p') ? ' selected="selected"' : '',
 				'ACP_SPAMREMOVER_BOARD_SELECTED'		=> ($sortby == 'b') ? ' selected="selected"' : '',
+				'ACP_SPAMREMOVER_POST_TIME_SELECTED'	=> ($sortby == 'p') ? ' selected="selected"' : '',
+				'ACP_SPAMREMOVER_TOPIC_SELECTED'		=> ($sortby == 't') ? ' selected="selected"' : '',
 
 				'ACP_SPAMREMOVER_ASCENDING_SELECTED'	=> ($sortorder == 'a') ? ' selected="selected"' : '',
 				'ACP_SPAMREMOVER_DESCENDING_SELECTED'	=> ($sortorder == 'd') ? ' selected="selected"' : '',
@@ -787,7 +795,7 @@ class acp_controller
 
 			$sql_ary = array(
 				'SELECT'	=> 'post_id, post_time, post_username, post_text, p.topic_id, u.user_id, is_blatant_spam, username, forum_name, topic_title,
-								enable_bbcode, 	enable_smilies, enable_magic_url, topic_first_post_id,
+								enable_bbcode, enable_smilies, enable_magic_url, topic_first_post_id, bbcode_uid, bbcode_bitfield, 
 								topic_posts_approved, topic_posts_unapproved, topic_posts_softdeleted, topic_first_post_id, left_id, right_id, topic_last_post_time',
 				'FROM'		=> array(
 								POSTS_TABLE		=> 'p',
@@ -861,8 +869,8 @@ class acp_controller
 			// Page filtering and sorting controls
 			$this->template->assign_vars(array(
 					'ACP_SPAMREMOVER_ALL_SELECTED'			=> ($spamtype == 'a') ? ' selected="selected"' : '',
-					'ACP_SPAMREMOVER_SPAM_SELECTED'			=> ($spamtype == 'p') ? ' selected="selected"' : '',
 					'ACP_SPAMREMOVER_BLATANT_SPAM_SELECTED'	=> ($spamtype == 'b') ? ' selected="selected"' : '',
+					'ACP_SPAMREMOVER_SPAM_SELECTED'			=> ($spamtype == 'p') ? ' selected="selected"' : '',
 
 					'ACP_SPAMREMOVER_AUTHOR_SELECTED'		=> ($sortby == 'a') ? ' selected="selected"' : '',
 					'ACP_SPAMREMOVER_MESSAGE_TIME_SELECTED'	=> ($sortby == 'm') ? ' selected="selected"' : '',
@@ -1333,7 +1341,7 @@ class acp_controller
 
 		$result = $this->db->sql_query($sql);
 		$rowset = $this->db->sql_fetchrowset($result);
-		$user_can_be_deleted = (count($rowset) === 1) ? true : false;
+		$user_can_be_deleted = (bool) (count($rowset) === 0);
 		$this->db->sql_freeresult($result);
 
 		return $user_can_be_deleted;
@@ -1350,7 +1358,7 @@ class acp_controller
 		{
 			// For some reason this function is being called but posts are not to be checked, so try to find spam private messages
 			$this->config->set('phpbbservices_spamremover_posts_found', 1); // This value is a flag indicating find posts step has completed
-			meta_refresh(1, $this->u_action . '&amp;find_type=pms');		// Check private messages next
+			meta_refresh(3, $this->u_action . '&amp;find_type=pms');		// Check private messages next
 		}
 
 		$batch_size = (int) $this->config['phpbbservices_spamremover_batch_size'];
@@ -1382,7 +1390,7 @@ class acp_controller
 		// Information on progress is passed as URL parameters. Couldn't get this to work with static variables.
 		$posts_spam_found = (int) $this->request->variable('spam', 0);	// Running total of spam found so far
 		$posts_checked = (int) $this->request->variable('checked', 0);	// Running total of posts checked so far
-		$posts_to_check = (int) $this->request->variable('to_check', 0);	// Total posts requiring checking. If zero, it is calculated next.
+		$posts_to_check = (int) $this->request->variable('to_check', 0);	// Total posts requiring checking. If zero, this is the first pass, so the value is calculated next.
 
 		// Determine total number of posts that need to be checked
 		if ($posts_to_check === 0);
@@ -1407,10 +1415,10 @@ class acp_controller
 		$skip_post_searched_sql = ($start_after_id == 0) ? '' : ' AND post_id > ' . $start_after_id;
 
 		$sql_ary = array(
-			'SELECT' 	=> 'post_id, post_time, poster_ip, poster_id, post_username, post_text, username, 
-						user_email, enable_bbcode, enable_smilies, enable_magic_url, user_sig_bbcode_uid, 
-						user_sig_bbcode_bitfield, topic_title, forum_name, user_dateformat, topic_first_post_id,
-						topic_posts_approved, topic_posts_unapproved, topic_posts_softdeleted, topic_first_post_id',
+			'SELECT' 	=> 'post_id, post_time, poster_ip, poster_id, post_username, post_text, bbcode_uid, bbcode_bitfield,
+						username, user_email, enable_bbcode, enable_smilies, enable_magic_url, topic_title, forum_name, 
+						user_dateformat, topic_first_post_id, topic_posts_approved, topic_posts_unapproved, 
+						topic_posts_softdeleted, topic_first_post_id',
 			'FROM'		=> 	array(
 				POSTS_TABLE => 'p',
 				USERS_TABLE => 'u',
@@ -1508,21 +1516,21 @@ class acp_controller
 			if ($check_pms)
 			{
 				$this->config->set('phpbbservices_spamremover_posts_found', 1); // This value is a flag indicating find posts step has completed
-				meta_refresh(1, $this->u_action . '&amp;find_type=pms');	// Check private messages next
+				meta_refresh(3, $this->u_action . '&amp;find_type=pms');	// Check private messages next
 				trigger_error($this->language->lang('ACP_SPAMREMOVER_ALL_POSTS_CHECKED', $posts_spam_found, $posts_to_check));
 			}
 			else
 			{
 				// Don't need to check private messages, so we're all done
 				$this->u_action = append_sid("index.$this->phpEx?i=-phpbbservices-spamremover-acp-main_module&amp;mode=find");
-				meta_refresh(1, $this->u_action);	// Check private messages next
+				meta_refresh(3, $this->u_action);	// Check private messages next
 				trigger_error($this->language->lang('ACP_SPAMREMOVER_ALL_POSTS_CHECKED', $posts_spam_found, $posts_to_check) . adm_back_link($this->u_action));
 			}
 		}
 		else
 		{
 			$percent_done = round((($posts_checked / $posts_to_check) * 100),1);
-			meta_refresh(1, $this->u_action . "&amp;find_type=posts&amp;find_id=$last_post_id&amp;spam=$posts_spam_found&amp;checked=$posts_checked&amp;to_check=$posts_to_check");	// Check next batch of posts
+			meta_refresh(3, $this->u_action . "&amp;find_type=posts&amp;find_id=$last_post_id&amp;spam=$posts_spam_found&amp;checked=$posts_checked&amp;to_check=$posts_to_check");	// Check next batch of posts
 			trigger_error($this->language->lang('ACP_SPAMREMOVER_PARTIAL_POSTS_CHECKED', $posts_spam_found, $posts_checked, ($posts_to_check - $posts_checked), $percent_done) . adm_back_link($this->u_action));
 		}
 
@@ -1613,7 +1621,7 @@ class acp_controller
 			$flags = (($rowset[$i]['enable_bbcode']) ? OPTION_FLAG_BBCODE : 0) +
 				(($rowset[$i]['enable_smilies']) ? OPTION_FLAG_SMILIES : 0) +
 				(($rowset[$i]['enable_magic_url']) ? OPTION_FLAG_LINKS : 0);
-			$message_text = generate_text_for_display(censor_text($rowset[$i]['message_text']), $rowset[$i]['bbcode_uid'], $rowset[$i]['bbcode_bitfield'], $flags);
+			$message_text = generate_text_for_display(censor_text($rowset[$i]['message_text']), $rowset[$i]['user_sig_bbcode_uid'], $rowset[$i]['user_sig_bbcode_bitfield'], $flags);
 
 			// Is this spam?
 			$data = array('blog'                 => $this->board_url,
@@ -1665,7 +1673,7 @@ class acp_controller
 			else	// It's ham
 			{
 				// Delete from the phpbb_spam_posts table if perhaps it was once judged as spam but isn't anymore.
-				$this->delete_spam_found_row($rowset[$i]['post_id'], 0);
+				$this->delete_spam_found_row($rowset[$i]['msg_id'], 0);
 			}
 
 			// Note the last msg_id saved
@@ -1689,7 +1697,7 @@ class acp_controller
 		{
 			$percent_done = round((($pms_checked / $pms_to_check) * 100),1);
 
-			meta_refresh(1, $this->u_action . "&amp;find_type=pms&amp;find_id=$last_msg_id&amp;spam=$pms_spam_found&amp;checked=$pms_checked&amp;to_check=$pms_to_check");	// Check next batch of private messages
+			meta_refresh(3, $this->u_action . "&amp;find_type=pms&amp;find_id=$last_msg_id&amp;spam=$pms_spam_found&amp;checked=$pms_checked&amp;to_check=$pms_to_check");	// Check next batch of private messages
 			trigger_error($this->language->lang('ACP_SPAMREMOVER_PARTIAL_PMS_CHECKED', $pms_spam_found, $pms_checked, ($pms_to_check - $pms_checked), $percent_done) . adm_back_link($this->u_action));
 		}
 

@@ -14,6 +14,6 @@ services:
             - '@dbal.conn'
             - '%core.php_ext%'
             - '%core.root_path%'
-            - '@service_container'
             - '%core.table_prefix%'
             - '%phpbbservices.spamremover.tables.spamremover_table%'
+            - '@pagination'

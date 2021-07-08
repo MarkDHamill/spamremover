@@ -183,7 +183,8 @@
 	<select id="sortorder" name="sortorder">
 		<option value="a"{{ ACP_SPAMREMOVER_ASCENDING_SELECTED }}>{{ lang('ASCENDING') }}</option>
 		<option value="d"{{ ACP_SPAMREMOVER_DESCENDING_SELECTED }}>{{ lang('DESCENDING') }}</option>
-	</select>&nbsp;
+	</select>
+	<input class="button2" type="submit" name="sort" id="sort" value="{{ lang('GO') }}" />&nbsp;
 </fieldset>
 {% endif %}
 
@@ -253,6 +254,7 @@
 		<option value="a"{{ ACP_SPAMREMOVER_ASCENDING_SELECTED }}>{{ lang('ASCENDING') }}</option>
 		<option value="d"{{ ACP_SPAMREMOVER_DESCENDING_SELECTED }}>{{ lang('DESCENDING') }}</option>
 	</select>&nbsp;
+	<input class="button2" type="submit" name="sort" id="sort" value="{{ lang('GO') }}" />
 </fieldset>
 {% endif %}
 
