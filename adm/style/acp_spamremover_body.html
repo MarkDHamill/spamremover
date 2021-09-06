@@ -21,6 +21,11 @@
 			<dd><label><input type="text" class="text" id="phpbbservices_spamremover_akismet_key" name="phpbbservices_spamremover_akismet_key" value="{{ PHPBBSERVICES_SPAMREMOVER_AKISMET_KEY }}" size="12" maxlength="12"></label>
 		</dl>
 		<dl>
+			<dt><label for="phpbbservices_spamremover_test_mode1">{{ lang('ACP_SPAMREMOVER_TEST_MODE') ~ lang('COLON') }}</label><br>{{ lang('ACP_SPAMREMOVER_TEST_MODE_EXPLAIN') }}</label></dt>
+			<dd><label><input type="radio" class="radio" id="phpbbservices_spamremover_test_mode1" name="phpbbservices_spamremover_test_mode" value="1"{% if PHPBBSERVICES_SPAMREMOVER_TEST_MODE %} checked="checked"{% endif %} /> {{ lang('YES') }}</label>
+				<label><input type="radio" class="radio" id="phpbbservices_spamremover_test_mode2" name="phpbbservices_spamremover_test_mode" value="0"{% if not PHPBBSERVICES_SPAMREMOVER_TEST_MODE %} checked="checked"{% endif %} /> {{ lang('NO') }}</label></dd>
+		</dl>
+		<dl>
 			<dt><label for="phpbbservices_spamremover_batch_size">{{ lang('ACP_SPAMREMOVER_BATCH_SIZE') ~ lang('COLON') }}</label><br>{{ lang('ACP_SPAMREMOVER_BATCH_SIZE_EXPLAIN') }}</dt>
 			<dd><label><input type="number" id="phpbbservices_spamremover_batch_size" name="phpbbservices_spamremover_batch_size" value="{{ PHPBBSERVICES_SPAMREMOVER_BATCH_SIZE }}" min="1"></label>
 		</dl>
@@ -44,11 +49,11 @@
 		</dl>
 		<dl>
 			<dt><label for="phpbbservices_spamremover_posts_start_date">{{ lang('ACP_SPAMREMOVER_POSTS_START_DATE') ~ lang('COLON') }}</label><br>{{ lang('ACP_SPAMREMOVER_POSTS_START_DATE_EXPLAIN') }}</dt>
-			<dd><label><input type="text" class="text" id="phpbbservices_spamremover_posts_start_date" name="phpbbservices_spamremover_posts_start_date" value="{{ PHPBBSERVICES_SPAMREMOVER_POSTS_START_DATE }}" size="10" maxlength="10" placeholder="YYYY-MM-DD"></label>
+			<dd><label><input type="text" class="text" id="phpbbservices_spamremover_posts_start_date" name="phpbbservices_spamremover_posts_start_date" value="{{ PHPBBSERVICES_SPAMREMOVER_POSTS_START_DATE }}" size="10" maxlength="10" placeholder="{{ lang('ACP_SPAMREMOVER_DATE_FORMAT') }}"></label>
 		</dl>
 		<dl>
 			<dt><label for="phpbbservices_spamremover_posts_end_date">{{ lang('ACP_SPAMREMOVER_POSTS_END_DATE') ~ lang('COLON') }}</label><br>{{ lang('ACP_SPAMREMOVER_POSTS_END_DATE_EXPLAIN') }}</dt>
-			<dd><label><input type="text" class="text" name="phpbbservices_spamremover_posts_end_date" id="phpbbservices_spamremover_posts_end_date" value="{{ PHPBBSERVICES_SPAMREMOVER_POSTS_END_DATE }}" size="10" maxlength="10" placeholder="YYYY-MM-DD"></label>
+			<dd><label><input type="text" class="text" name="phpbbservices_spamremover_posts_end_date" id="phpbbservices_spamremover_posts_end_date" value="{{ PHPBBSERVICES_SPAMREMOVER_POSTS_END_DATE }}" size="10" maxlength="10" placeholder="{{ lang('ACP_SPAMREMOVER_DATE_FORMAT') }}"></label>
 		</dl>
 		<dl>
 			<dt><label for="phpbbservices_spamremover_find_all_posts1">{{ lang('ACP_SPAMREMOVER_FIND_ALL_POSTS')}}</label><br>{{ lang('ACP_SPAMREMOVER_FIND_ALL_POSTS_EXPLAIN') }}</dt>
@@ -65,11 +70,11 @@
 		</dl>
 		<dl>
 			<dt><label for="phpbbservices_spamremover_pms_start_date">{{ lang('ACP_SPAMREMOVER_PMS_START_DATE') ~ lang('COLON') }}</label><br>{{ lang('ACP_SPAMREMOVER_PMS_START_DATE_EXPLAIN') }}</dt>
-			<dd><label><input type="text" class="text" name="phpbbservices_spamremover_pms_start_date" id="phpbbservices_spamremover_pms_start_date" value="{{ PHPBBSERVICES_SPAMREMOVER_PMS_START_DATE }}" size="10" maxlength="10" placeholder="YYYY-MM-DD"></label>
+			<dd><label><input type="text" class="text" name="phpbbservices_spamremover_pms_start_date" id="phpbbservices_spamremover_pms_start_date" value="{{ PHPBBSERVICES_SPAMREMOVER_PMS_START_DATE }}" size="10" maxlength="10" placeholder="{{ lang('ACP_SPAMREMOVER_DATE_FORMAT') }}"></label>
 		</dl>
 		<dl>
 			<dt><label for="phpbbservices_spamremover_pms_end_date">{{ lang('ACP_SPAMREMOVER_PMS_END_DATE') ~ lang('COLON') }}</label><br>{{ lang('ACP_SPAMREMOVER_PMS_END_DATE_EXPLAIN') }}</dt>
-			<dd><label><input type="text" class="text" name="phpbbservices_spamremover_pms_end_date" id="phpbbservices_spamremover_pms_end_date" value="{{ PHPBBSERVICES_SPAMREMOVER_PMS_END_DATE }}" size="10" maxlength="10" placeholder="YYYY-MM-DD"></label>
+			<dd><label><input type="text" class="text" name="phpbbservices_spamremover_pms_end_date" id="phpbbservices_spamremover_pms_end_date" value="{{ PHPBBSERVICES_SPAMREMOVER_PMS_END_DATE }}" size="10" maxlength="10" placeholder="{{ lang('ACP_SPAMREMOVER_DATE_FORMAT') }}"></label>
 		</dl>
 		<dl>
 			<dt><label for="phpbbservices_spamremover_find_all_pms1">{{ lang('ACP_SPAMREMOVER_FIND_ALL_PMS')}}</label><br>{{ lang('ACP_SPAMREMOVER_FIND_ALL_PMS_EXPLAIN') }}</dt>
@@ -117,16 +122,18 @@
 	{% endif %}
 </div>
 <table id="spam">
-	<col style="width:75px;">
-	<col style="width:150px;">
-	<col style="width:100px;">
-	<col style="width:75px;">
-	<col>
-	<col>
-	<col style="width:150px;">
-	<col style="width:150px;">
-	<col>
-	<col style="width:75px;">
+	<colgroup>
+		<col style="width:75px;">
+		<col style="width:150px;">
+		<col style="width:100px;">
+		<col style="width:75px;">
+		<col>
+		<col>
+		<col style="width:150px;">
+		<col style="width:150px;">
+		<col>
+		<col style="width:75px;">
+	</colgroup>
 	<thead>
 	<tr>
 		<th>{{ lang('ACP_SPAMREMOVER_POST_ID') }}</th>
@@ -197,13 +204,15 @@
 	{% endif %}
 </div>
 <table id="spam2">
-	<col style="width:75px;">
-	<col style="width:150px;">
-	<col style="width:100px;">
-	<col style="width:100px;">
-	<col>
-	<col>
-	<col style="width:75px;">
+	<colgroup>
+		<col style="width:75px;">
+		<col style="width:150px;">
+		<col style="width:100px;">
+		<col style="width:100px;">
+		<col>
+		<col>
+		<col style="width:75px;">
+	</colgroup>
 	<thead>
 	<tr>
 		<th>{{ lang('ACP_SPAMREMOVER_MSG_ID') }}</th>
@@ -266,6 +275,9 @@
 {% if S_REMOVE_BULK and not S_ERROR %}
 <h1>{{ lang('ACP_SPAMREMOVER_BULK_REMOVE_SPAM') }}</h1>
 <p>{{ lang('ACP_SPAMREMOVER_BULK_REMOVE_SPAM_EXPLAIN') }}</p>
+{% if S_TEST_MODE %}
+<p><strong class="highlight">{{ lang('ACP_SPAMREMOVER_TEST_MODE_IMPLICATIONS') }}</strong></p>
+{% endif %}
 {{ lang('ACP_SPAMREMOVER_BULK_REMOVE_SPAM_EXPLAIN_EXTRA') }}
 <fieldset id="mode">
 	<dl>
@@ -296,7 +308,7 @@
 
 {% if S_SETTINGS or not S_ERROR and not S_SUMMARY %}
 <fieldset class="submit-buttons">
-	<input class="button1" type="submit" id="submit" name="submit" value="{% if S_FIND %}{{ lang('ACP_SPAMREMOVER_FIND_SPAM') }}{% else %}{{ lang('SUBMIT') }}{% endif %}">
+	<input class="button1" type="submit" id="submit" name="submit" value="{{ lang(S_FIND ? 'ACP_SPAMREMOVER_FIND_SPAM' : 'SUBMIT') }}">
 	<input class="button2" type="reset" id="reset" name="reset" value="{{ lang('RESET') }}">
 	<input type="hidden" name="phpbbservices_spamremover_akismet_action" id="phpbbservices_spamremover_akismet_action" value="c">
 	{{ S_FORM_TOKEN }}

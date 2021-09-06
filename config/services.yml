@@ -17,3 +17,4 @@ services:
             - '%core.table_prefix%'
             - '%phpbbservices.spamremover.tables.spamremover_table%'
             - '@pagination'
+            - '@ext.manager'

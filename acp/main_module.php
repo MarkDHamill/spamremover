@@ -42,9 +42,6 @@ class main_module
 		// Load a template from adm/style for our ACP page
 		$this->tpl_name = 'acp_spamremover_body';
 
-		// Get the mode
-		$mode = $request->variable('mode', 'settings');
-
 		// Set the page title for our ACP page
 		if ($mode === 'settings')
 		{

@@ -7,6 +7,9 @@ input[type="number"] {
 	min-width: 100px;
 }
 #collapse-expand {float: right;}
+.highlight {
+	color:#ff0000;
+}
 hr {margin-top: 25px;}
 li {
 	font-size: 0.9em;

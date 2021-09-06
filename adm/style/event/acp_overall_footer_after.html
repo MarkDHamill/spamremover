@@ -17,7 +17,7 @@
 			// If in the bulk spam removal function, warn before submitting if the radio button was checked allowing it.
 			var commit = $("input:radio[name='phpbbservices_spamremover_proceed']:checked, input:radio[name='phpbbservices_spamremover_reset']:checked").val();
 			if (commit == '1') {
-				if (!confirm('{{ lang('ACP_SPAMREMOVER_ARE_YOU_SURE') }}')) {
+				if (!confirm('{{ lang('ACP_SPAMREMOVER_ARE_YOU_SURE')|escape("js") }}')) {
 					event.preventDefault();
 				}
 			}

@@ -50,6 +50,7 @@ $lang = array_merge($lang, array(
 	'ACP_SPAMREMOVER_SETTINGS_EXPLAIN_EXTRA'		=> '<h2>Please follow these procedures to correctly use this extension:</h2><br>
 <ol>
 <li>First, configure the settings on this page correctly.</li>
+<li>It is recommended you enable test mode and disable it only when you are ready to do a bulk spam removal.</li>
 <li>Next, use the <a href="%1$s">find spam</a> function to locate spam in posts and private messages.</li>
 <li>Next, run the <a href="%2$s">spam summary</a> to get an idea of the scope of your spam issue within the types of content and date ranges you want checked. Note that all spam statistics will show zero unless you first run the <a href="%1$s">find spam</a> function.</li>
 <li>Next, use the <a href="%3$s">spam posts details report</a> and the <a href="%4$s">spam private messages details report</a> to unflag any incorrectly identified spam. Make sure to use the pagination feature to review all the spam.</li>
