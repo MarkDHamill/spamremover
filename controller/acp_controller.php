@@ -72,7 +72,8 @@ class acp_controller
 		$this->phpbb_root_path 	= $phpbb_root_path;
 		$this->phpEx			= $php_ext;
 		$this->request			= $request;
-		$this->spam_found_table	= $spam_found_table;
+		$this->spam_found_table	= (string) $spam_found_table;
+
 		$this->table_prefix 	= $table_prefix;
 		$this->template			= $template;
 		$this->user				= $user;
@@ -214,7 +215,6 @@ class acp_controller
 
 						foreach ($rowset as $row)
 						{
-
 							// Submit ham
 							$post_link = sprintf("%sviewtopic.{$this->phpEx}?f=%s&amp;t=%s#p%s", $this->board_url, $row['forum_id'], $row['topic_id'], $row['post_id']);
 							$post_type = ($row['topic_first_post_id'] == $row['post_id']) ? 'forum-post' : 'reply';
@@ -244,6 +244,8 @@ class acp_controller
 							// Remove the row from the phpbb_spam_found table as it was judged not to be spam
 							$this->delete_spam_found_row($row['post_id'], 1);
 
+							// Decrement the total post spam found counter
+							$this->config->set('phpbbservices_spamremover_total_post_spam', ((int) $this->config['phpbbservices_spamremover_total_post_spam']) - 1);
 						}
 
 						$this->db->sql_freeresult($result);
@@ -279,7 +281,7 @@ class acp_controller
 					{
 						// Report the private message as ham to Akismet and remove it from the database
 						$sql_ary = array(
-							'SELECT' => "m.msg_id, message_time, author_ip, m.author_id, message_text, bbcode_uid, bbcode_bitfield, u.username AS 'from', 
+							'SELECT' => "m.msg_id, message_time, author_ip, m.author_id, message_text, bbcode_uid, bbcode_bitfield, u.username AS from_user, 
 										u.user_email, enable_bbcode, enable_smilies, enable_magic_url, message_subject, u.user_dateformat",
 							'FROM' => array(
 								PRIVMSGS_TABLE  => 'm',
@@ -306,7 +308,7 @@ class acp_controller
 										  'referrer'             => '',
 										  'permalink'            => $message_link,
 										  'comment_type'         => 'message',
-										  'comment_author'       => $row['from'],
+										  'comment_author'       => $row['from_user'],
 										  'comment_author_email' => $row['user_email'],
 										  'comment_author_url'   => '',
 										  'comment_content'      => $message_text,
@@ -319,6 +321,9 @@ class acp_controller
 
 							// Remove the row from the phpbb_spam_found table as it was judged not to be spam
 							$this->delete_spam_found_row($row['msg_id'], 0);
+
+							// Decrement the total private message spam found counter
+							$this->config->set('phpbbservices_spamremover_total_pms_spam', ((int) $this->config['phpbbservices_spamremover_total_pms_spam']) - 1);
 						}
 
 						$this->db->sql_freeresult($result);
@@ -335,11 +340,6 @@ class acp_controller
 
 				if ($mode === 'bulk_remove')
 				{
-
-					// May need logic to do this in batches similar to the find function. On boards with lots of spam there
-					// could be hundreds of thousands of posts and PMs to delete. OTOH, by using transactions if we abruptly
-					// run out of resources, the database should be consistent.
-
 					// Save the values in the form fields
 					$this->config->set('phpbbservices_spamremover_blatant_only', $this->request->variable('phpbbservices_spamremover_blatant_only', 0));
 					$blatant_only = $this->request->variable('phpbbservices_spamremover_blatant_only', false);
@@ -350,90 +350,17 @@ class acp_controller
 						// Radio button not checked to confirm the action
 						trigger_error($this->language->lang('ACP_SPAMREMOVER_NO_SPAM_REMOVED') . adm_back_link($this->u_action));
 					}
-
-					// Onward! Remove the spam!
-					$topics_removed = 0;
-					$users_removed = 0;
-
-					// Delete the spam posts
-					$blatant_only_sql = ($blatant_only) ? ' AND is_blatant_spam = 1' : '';
-					$sql_ary = array(
-						'SELECT' 	=> 'post_id',
-						'FROM' 		=> array(
-							POSTS_TABLE  => 'p',
-							$this->spam_found_table	=> 's'),
-						'WHERE'		=> 'is_post = 1 AND p.post_id = s.post_msg_id' . $blatant_only_sql);
-					$sql = $this->db->sql_build_query('SELECT', $sql_ary);
-					$result = $this->db->sql_query($sql);
-					$rowset = $this->db->sql_fetchrowset($result);
-					$posts_to_remove = count($rowset);
-
-					foreach ($rowset as $row)
+					else
 					{
-
-						// Use a transaction. If we abruptly run out of resources, we want the database to be consistent.
-						$this->db->sql_transaction('begin');
-
-						// Delete the post
-						$actions = $this->delete_post($row['post_id'], $test_mode);
-
-						if (!is_array($actions) && $actions === false)
+						if ($test_mode)
 						{
-							$this->db->sql_transaction('rollback');
-							continue;	// Skip, post has been removed already, probably because its topic was previously deleted
+							trigger_error(sprintf($this->language->lang('ACP_SPAMREMOVER_TEST_MODE_ERROR'). adm_back_link($this->u_action)));
 						}
-
-						// Delete the row in the phpbb_spam_found table;
-						$this->delete_spam_found_row($row['post_id'], 1);
-
-						if ($actions['topic_removed'])
+						else
 						{
-							$topics_removed++;
+							$this->delete_spam($blatant_only, true);
 						}
-
-						if ($actions['user_removed'])
-						{
-							$users_removed++;
-						}
-
-						$this->db->sql_transaction('commit');
-
 					}
-					$this->db->sql_freeresult($result);
-
-					// Delete the spam private messages
-					$sql_ary = array(
-						'SELECT' 	=> 'msg_id',
-						'FROM' 		=> array(
-							PRIVMSGS_TABLE  	=> 'm',
-							$this->spam_found_table	=> 's'),
-						'WHERE'		=> 'is_post = 0 AND m.msg_id = s.post_msg_id' . $blatant_only_sql);
-					$sql = $this->db->sql_build_query('SELECT', $sql_ary);
-					$result = $this->db->sql_query($sql);
-					$rowset = $this->db->sql_fetchrowset($result);
-					$pms_to_remove = count($rowset);
-
-					foreach ($rowset as $row)
-					{
-						// Use a transaction. If we abruptly run out of resources, we want the database to be consistent.
-						$this->db->sql_transaction('begin');
-
-						// Delete the private message
-						$this->delete_private_message($row['msg_id'], $test_mode);
-
-						// Delete the row in the phpbb_spam_found table;
-						$this->delete_spam_found_row($row['msg_id'], 0);
-
-						$this->db->sql_transaction('commit');
-					}
-					$this->db->sql_freeresult($result);
-
-					// Note in the log the bulk remove function was run.
-					$this->log->add('admin', $this->user->data['user_id'], $this->user->ip, 'LOG_ACP_SPAMREMOVER_BULK_REMOVE_RAN', false, array($posts_to_remove, $topics_removed, $users_removed, $pms_to_remove));
-
-					// All done!
-					trigger_error(sprintf($this->language->lang('ACP_SPAMREMOVER_SPAM_REMOVED'), $posts_to_remove, $topics_removed, $users_removed, $pms_to_remove) . adm_back_link($this->u_action));
-
 				}
 
 				if ($mode === 'reset')
@@ -446,7 +373,6 @@ class acp_controller
 
 						// Note in the log the reset occurred.
 						$this->log->add('admin', $this->user->data['user_id'], $this->user->ip, 'LOG_ACP_SPAMREMOVER_RESET');
-
 						trigger_error($this->language->lang('ACP_SPAMREMOVER_SPAM_ERASED'). adm_back_link($this->u_action));
 					}
 					else
@@ -508,11 +434,7 @@ class acp_controller
 				$num_posts = $this->config['num_posts'];
 
 				// Estimate the time to check all posts. Based on testing, Akismet can test about 4 posts per second.
-				$est_post_seconds = round($num_posts/4);
-				$post_hrs = floor($est_post_seconds/3600);
-				$est_post_seconds = ($post_hrs != 0) ? $est_post_seconds % ($post_hrs * 3600) : $est_post_seconds;
-				$post_min = floor($est_post_seconds/60);
-				$post_sec = ($post_min != 0) ? $est_post_seconds % ($post_min * 60) : $est_post_seconds;
+				$posts_processing_time = $this->estimate_spam_check_time($num_posts);
 
 				// Get private message count
 				$sql = 'SELECT count(*) as pms_count
@@ -522,21 +444,17 @@ class acp_controller
 				$this->db->sql_freeresult($result);
 
 				// Estimate the time to check all private messages. Based on testing, Akismet can test about 4 private messages per second.
-				$est_pms_seconds = round($num_pms/4);
-				$pms_hrs = floor($est_pms_seconds/3600);
-				$est_pms_seconds = ($pms_hrs != 0) ? $est_pms_seconds % ($pms_hrs * 3600) : $est_pms_seconds;
-				$pms_min = floor($est_pms_seconds/60);
-				$pms_sec = ($pms_min != 0) ? $est_pms_seconds % ($pms_min * 60) : $est_pms_seconds;
+				$pms_processing_time = $this->estimate_spam_check_time($num_pms);
 
 				// Populate the form fields with current values in the database
 				$this->template->assign_vars(array(
 					'L_ACP_SPAMREMOVER_FIND_SPAM_EXPLAIN'				=> $this->language->lang('ACP_SPAMREMOVER_FIND_SPAM_EXPLAIN',
-						str_pad($post_hrs,2,'0', STR_PAD_LEFT),
-						str_pad($post_min,2,'0', STR_PAD_LEFT),
-						str_pad($post_sec,2,'0', STR_PAD_LEFT),
-						str_pad($pms_hrs,2,'0', STR_PAD_LEFT),
-						str_pad($pms_min,2,'0', STR_PAD_LEFT),
-						str_pad($pms_sec,2,'0', STR_PAD_LEFT)),
+						str_pad($posts_processing_time['items_hrs'],2,'0', STR_PAD_LEFT),
+						str_pad($posts_processing_time['items_min'],2,'0', STR_PAD_LEFT),
+						str_pad($posts_processing_time['items_sec'],2,'0', STR_PAD_LEFT),
+						str_pad($pms_processing_time['items_hrs'],2,'0', STR_PAD_LEFT),
+						str_pad($pms_processing_time['items_min'],2,'0', STR_PAD_LEFT),
+						str_pad($pms_processing_time['items_sec'],2,'0', STR_PAD_LEFT)),
 					'PHPBBSERVICES_SPAMREMOVER_FIND_ALL_PMS'			=> (bool) $this->config['phpbbservices_spamremover_find_all_pms'],
 					'PHPBBSERVICES_SPAMREMOVER_FIND_ALL_POSTS'			=> (bool) $this->config['phpbbservices_spamremover_find_all_posts'],
 					'PHPBBSERVICES_SPAMREMOVER_PMS'						=> (bool) $this->config['phpbbservices_spamremover_pms'],
@@ -610,14 +528,7 @@ class acp_controller
 			));
 
 			// This array facilitates showing counts for spam types that may not be returned if a query returns no rows
-			$posts_row = array(SELF::HAM => 0, SELF::SPAM => 0, SELF::BLATANT_SPAM => 0);
-
-			// Determine the date range, if any, of the posts to check for spam
-			$start_date_str = trim($this->config['phpbbservices_spamremover_posts_start_date']);
-			$end_date_str = trim($this->config['phpbbservices_spamremover_posts_end_date']);
-
-			// Create the SQL condition to find the correct posts to check for spam
-			$date_range = $this->create_start_end_date_sql($start_date_str, $end_date_str);
+			$posts_row = array(self::HAM => 0, self::SPAM => 0, self::BLATANT_SPAM => 0);
 
 			// Determine total number of posts that were checked for spam
 			$sql_ary = array(
@@ -627,8 +538,7 @@ class acp_controller
 					USERS_TABLE => 'u',
 					TOPICS_TABLE => 't',
 					FORUMS_TABLE => 'f'),
-				'WHERE'		=> "p.poster_id = u.user_id AND p.topic_id = t.topic_id AND p.forum_id = f.forum_id $date_range",
-				'ORDER_BY'	=> 'post_id');
+				'WHERE'		=> "p.poster_id = u.user_id AND p.topic_id = t.topic_id AND p.forum_id = f.forum_id");
 			$sql = $this->db->sql_build_query('SELECT', $sql_ary);
 			$result = $this->db->sql_query($sql);
 			$row_count = $this->db->sql_fetchfield('row_count');
@@ -639,41 +549,31 @@ class acp_controller
 				'SELECT' 	=>'is_blatant_spam, count(*) as type_count',
 				'FROM' 		=> array(
 					$this->spam_found_table	=> 's'),
-				'WHERE'		=> "is_post = 1 $date_range",
+				'WHERE'		=> 'is_post = 1',
 				'GROUP_BY' 	=> 'is_blatant_spam',
 				'ORDER_BY'	=> 'is_blatant_spam');
 			$sql = $this->db->sql_build_query('SELECT', $sql_ary);
-
 			$result = $this->db->sql_query($sql);
 			$rowset = $this->db->sql_fetchrowset($result);
-
 			foreach ($rowset as $row)
 			{
 				$posts_row[$row['is_blatant_spam']] = (int) $row['type_count'];
 			}
+			$this->db->sql_freeresult($result);
 
 			// Calculate the ham
-			$post_ham = $row_count - ($posts_row[SELF::SPAM] + $posts_row[SELF::BLATANT_SPAM]);
-
-			$this->db->sql_freeresult($result);
+			$post_ham = $row_count - ($posts_row[self::SPAM] + $posts_row[self::BLATANT_SPAM]);
 
 			// Report post spam
 			$this->template->assign_vars(array(
 					'ACP_SPAMREMOVER_POSTS_HAM'				=> $post_ham,
-					'ACP_SPAMREMOVER_POSTS_SPAM'			=> $posts_row[SELF::SPAM],
-					'ACP_SPAMREMOVER_POSTS_BLATANT_SPAM'	=> $posts_row[SELF::BLATANT_SPAM],
+					'ACP_SPAMREMOVER_POSTS_SPAM'			=> $posts_row[self::SPAM],
+					'ACP_SPAMREMOVER_POSTS_BLATANT_SPAM'	=> $posts_row[self::BLATANT_SPAM],
 				)
 			);
 
 			// This array facilitates showing counts for spam types that may not be returned if a query returns no rows
-			$pms_row = array(SELF::HAM => 0, SELF::SPAM => 0, SELF::BLATANT_SPAM => 0);
-
-			// Determine the date range, if any, of the private messages to check for spam
-			$start_date_str = trim($this->config['phpbbservices_spamremover_pms_start_date']);
-			$end_date_str = trim($this->config['phpbbservices_spamremover_pms_end_date']);
-
-			// Create the SQL condition to find the correct private messages to check for spam
-			$date_range = $this->create_start_end_date_sql($start_date_str, $end_date_str);
+			$pms_row = array(self::HAM => 0, self::SPAM => 0, self::BLATANT_SPAM => 0);
 
 			// Determine total number of private messages that need to be checked
 			$sql_ary = array(
@@ -681,8 +581,7 @@ class acp_controller
 				'FROM'		=> 	array(
 					PRIVMSGS_TABLE => 'pm',
 					USERS_TABLE => 'u'),
-				'WHERE'		=> "pm.author_id = u.user_id $date_range",
-				'ORDER_BY'	=> 'msg_id');
+				'WHERE'		=> "pm.author_id = u.user_id");
 			$sql = $this->db->sql_build_query('SELECT', $sql_ary);
 			$result = $this->db->sql_query($sql);
 			$row_count = $this->db->sql_fetchfield('row_count');
@@ -693,29 +592,26 @@ class acp_controller
 				'SELECT' 	=>'is_blatant_spam, count(*) as type_count',
 				'FROM' 		=> array(
 					$this->spam_found_table	=> 's'),
-				'WHERE'		=> "is_post = 0 $date_range",
+				'WHERE'		=> 'is_post = 0',
 				'GROUP_BY' 	=> 'is_blatant_spam',
 				'ORDER_BY'	=> 'is_blatant_spam');
 			$sql = $this->db->sql_build_query('SELECT', $sql_ary);
-
 			$result = $this->db->sql_query($sql);
 			$rowset = $this->db->sql_fetchrowset($result);
-
 			foreach ($rowset as $row)
 			{
 				$pms_row[$row['is_blatant_spam']] = (int) $row['type_count'];
 			}
+			$this->db->sql_freeresult($result);
 
 			// Calculate the ham
-			$pms_ham = $row_count - ($pms_row[SELF::SPAM] + $pms_row[SELF::BLATANT_SPAM]);
-
-			$this->db->sql_freeresult($result);
+			$pms_ham = $row_count - ($pms_row[self::SPAM] + $pms_row[self::BLATANT_SPAM]);
 
 			// Report private message spam
 			$this->template->assign_vars(array(
 					'ACP_SPAMREMOVER_MSGS_HAM'				=> $pms_ham,
-					'ACP_SPAMREMOVER_MSGS_SPAM'				=> $pms_row[SELF::SPAM],
-					'ACP_SPAMREMOVER_MSGS_BLATANT_SPAM'		=> $pms_row[SELF::BLATANT_SPAM]
+					'ACP_SPAMREMOVER_MSGS_SPAM'				=> $pms_row[self::SPAM],
+					'ACP_SPAMREMOVER_MSGS_BLATANT_SPAM'		=> $pms_row[self::BLATANT_SPAM]
 				)
 			);
 
@@ -739,11 +635,11 @@ class acp_controller
 				break;
 
 				case 'p':
-					$subscribe_sql = 'is_post = 1 AND is_blatant_spam = ' . SELF::SPAM;
+					$subscribe_sql = 'is_post = 1 AND is_blatant_spam = ' . self::SPAM;
 				break;
 
 				case 'b':
-					$subscribe_sql = 'is_post = 1 AND is_blatant_spam = ' . SELF::BLATANT_SPAM;
+					$subscribe_sql = 'is_post = 1 AND is_blatant_spam = ' . self::BLATANT_SPAM;
 				break;
 			}
 
@@ -784,8 +680,8 @@ class acp_controller
 				)
 			);
 
-			$spam_types = array(SELF::SPAM => $this->language->lang('ACP_SPAMREMOVER_SPAM'),
-								SELF::BLATANT_SPAM => $this->language->lang('ACP_SPAMREMOVER_BLATANT_SPAM'));
+			$spam_types = array(self::SPAM => $this->language->lang('ACP_SPAMREMOVER_SPAM'),
+								self::BLATANT_SPAM => $this->language->lang('ACP_SPAMREMOVER_BLATANT_SPAM'));
 
 			// Get the total rows for pagination purposes
 			$sql_ary = array(
@@ -876,11 +772,11 @@ class acp_controller
 				break;
 
 				case 'p':
-					$subscribe_sql = 'is_post = 0 AND is_blatant_spam = ' . SELF::SPAM;
+					$subscribe_sql = 'is_post = 0 AND is_blatant_spam = ' . self::SPAM;
 				break;
 
 				case 'b':
-					$subscribe_sql = 'is_post = 0 AND is_blatant_spam = ' . SELF::BLATANT_SPAM;
+					$subscribe_sql = 'is_post = 0 AND is_blatant_spam = ' . self::BLATANT_SPAM;
 				break;
 			}
 
@@ -904,8 +800,8 @@ class acp_controller
 				)
 			);
 
-			$spam_types = array(SELF::SPAM => $this->language->lang('ACP_SPAMREMOVER_SPAM'),
-								SELF::BLATANT_SPAM => $this->language->lang('ACP_SPAMREMOVER_BLATANT_SPAM'));
+			$spam_types = array(self::SPAM => $this->language->lang('ACP_SPAMREMOVER_SPAM'),
+								self::BLATANT_SPAM => $this->language->lang('ACP_SPAMREMOVER_BLATANT_SPAM'));
 
 			// Get the total rows for pagination purposes
 			$sql_ary = array(
@@ -971,11 +867,28 @@ class acp_controller
 
 		if ($mode === 'bulk_remove')
 		{
-			$this->template->assign_vars(array(
-				'S_INCLUDE_SR_CSS' 						=> true,
-				'S_REMOVE_BULK'							=> true,
-				'S_TEST_MODE'							=> $test_mode,
-			));
+			// If there are no relevant GET variables like posts_removed, present a screen to start the process. Otherwise, continue processing
+			// because this is being called by trigger_error.
+			if (!$this->request->is_set('posts_removed', \phpbb\request\request_interface::GET) &&
+				!$this->request->is_set('pms_removed', \phpbb\request\request_interface::GET) &&
+				!$this->request->is_set('topics_removed', \phpbb\request\request_interface::GET) &&
+				!$this->request->is_set('users_removed', \phpbb\request\request_interface::GET &&
+				!$this->request->is_set('posts_checked', \phpbb\request\request_interface::GET) &&
+				!$this->request->is_set('pms_checked', \phpbb\request\request_interface::GET))
+			)
+			{
+				$this->template->assign_vars(array(
+					'S_INCLUDE_SR_CSS' 						=> true,
+					'S_REMOVE_BULK'							=> true,
+					'S_TEST_MODE'							=> $test_mode,
+				));
+			}
+			else
+			{
+				// Keep chugging along deleting spam...
+				$blatant_only = $this->request->variable('phpbbservices_spamremover_blatant_only', false);
+				$this->delete_spam($blatant_only, false);
+			}
 		}
 
 		if ($mode === 'reset')
@@ -1007,30 +920,12 @@ class acp_controller
 		// $key = Askismet service authorizaton key associated with board (12 characters)
 		// $blog = URL of board
 
-		$blog = urlencode($blog);
-		$request = 'key=' . $key . '&blog='. $blog;
-		$host = $http_host = 'rest.akismet.com';
+		$request = 'key=' . $key . '&blog=' . $blog;
 		$path = '/1.1/verify-key';
-		$port = 443;
-		$content_length = strlen($request);
-		$http_request  = "POST $path HTTP/1.0\r\n";
-		$http_request .= "Host: $host\r\n";
-		$http_request .= "Content-Type: application/x-www-form-urlencoded\r\n";
-		$http_request .= "Content-Length: {$content_length}\r\n";
-		$http_request .= "User-Agent: {$this->user_agent}\r\n";
-		$http_request .= "\r\n";
-		$http_request .= $request;
 
-		$response = $this->send_akismet_query($http_request, $http_host, $port, $errno, $errstr, 10);
+		$response = $this->send_akismet_query($request, $path, $key);
 
-		if (count($response) == 2)
-		{
-			return 'valid' == $response[1];
-		}
-		else
-		{
-			return false;
-		}
+		return (count($response) == 2) ? 'valid' == $response[1] : false;
 
 	}
 
@@ -1051,34 +946,22 @@ class acp_controller
 		$request = 'blog='. urlencode($data['blog']) .
 			'&user_ip='. urlencode($data['user_ip']) .
 			'&user_agent=' . urlencode($this->user_agent) .
-			'&referrer='. urlencode($data['referrer']) .
 			'&permalink='. urlencode($data['permalink']) .
 			'&comment_type='. urlencode($data['comment_type']) .
 			'&comment_author='. urlencode($data['comment_author']) .
 			'&comment_author_email='. urlencode($data['comment_author_email']) .
-			'&comment_author_url='. urlencode($data['comment_author_url']) .
 			'&comment_content='. urlencode($data['comment_content']) .
 			'&comment_date_gmt'. urlencode($data['comment_date_gmt']) .
 			'&blog_lang'. urlencode($data['blog_lang']) .
 			'&blog_charset'. urlencode($data['blog_charset']);
 
-		$host = $http_host = $key.'.rest.akismet.com';
 		$path = '/1.1/submit-ham';
-		$port = 443;
-		$content_length = strlen($request);
-		$http_request  = "POST $path HTTP/1.0\r\n";
-		$http_request .= "Host: $host\r\n";
-		$http_request .= "Content-Type: application/x-www-form-urlencoded\r\n";
-		$http_request .= "Content-Length: {$content_length}\r\n";
-		$http_request .= "User-Agent: {$this->user_agent}\r\n";
-		$http_request .= "\r\n";
-		$http_request .= $request;
 
-		$response = $this->send_akismet_query($http_request, $http_host, $port, $errno, $errstr, 10);
+		$response = $this->send_akismet_query($request, $path, $key);
 
 		if (count($response) == 2)
 		{
-			return ('Thanks for making the web a better place.' == $response[1]) ? true : false;
+			return 'Thanks for making the web a better place.' == $response[1];
 		}
 		else
 		{
@@ -1099,15 +982,13 @@ class acp_controller
 		$request = 'blog='. urlencode($data['blog']) .
 			'&user_ip='. urlencode($data['user_ip']) .
 			'&user_agent='. urlencode($this->user_agent) .
-			'&referrer='. urlencode($data['referrer']) .
 			'&permalink='. urlencode($data['permalink']) .
 			'&comment_type='. urlencode($data['comment_type']) .
 			'&comment_author_email='. urlencode($data['comment_author_email']) .
-			'&comment_author_url='. urlencode($data['comment_author_url']) .
 			'&comment_content='. urlencode($data['comment_content']) .
-			'&comment_date_gmt'. urlencode($data['comment_date_gmt']) .
-			'&blog_lang'. urlencode($data['blog_lang']) .
-			'&blog_charset'. urlencode($data['blog_charset']);
+			'&comment_date_gmt='. urlencode($data['comment_date_gmt']) .
+			'&blog_lang='. urlencode($data['blog_lang']) .
+			'&blog_charset='. urlencode($data['blog_charset']);
 
 		// If just testing, tell Akismet. In test mode, Akismet's database won't change based on the information it is sent.
 		if ($test_mode)
@@ -1117,7 +998,8 @@ class acp_controller
 
 		// Simulation mode is strictly for development purposes. We need something to show in reports in case nothing is flagged as spam by Akismet.
 		// This constant should normally be set to false. Pass the right stuff to Akismet and it will flag a false response.
-		if (SELF::SIMULATION_MODE)
+
+		if (self::SIMULATION_MODE)
 		{
 			$force_spam = (bool) random_int(0, 1); // Make each request random, roughly half of the time it's spam, half it's not
 			if (!$force_spam)
@@ -1134,22 +1016,10 @@ class acp_controller
 		{
 			$request .= '&comment_author='. urlencode($data['comment_author']);		// Normal spam check call to Akismet
 		}
-
-		$host = $http_host = $key.'.rest.akismet.com';
 		$path = '/1.1/comment-check';
-		$port = 443;
-		$content_length = strlen($request);
 
-		// Create the HTTP header
-		$http_request  = "POST $path HTTP/1.0\r\n";
-		$http_request .= "Host: $host\r\n";
-		$http_request .= "Content-Type: application/x-www-form-urlencoded\r\n";
-		$http_request .= "Content-Length: {$content_length}\r\n";
-		$http_request .= "User-Agent: {$this->user_agent}\r\n";
-		$http_request .= "\r\n";
-		$http_request .= $request;
+		$response = $this->send_akismet_query($request, $path, $key);
 
-		$response = $this->send_akismet_query($http_request, $http_host, $port, $errno, $errstr, 10);
 		$metadata = explode("\r\n", $response[0]);
 
 		// Return the spam judgment that was made by the Akismet service. This
@@ -1157,28 +1027,55 @@ class acp_controller
 		{
 			if (in_array('X-akismet-pro-tip: discard', $metadata))
 			{
-				return SELF::BLATANT_SPAM;
+				$spam_type = self::BLATANT_SPAM;
 			}
 			else
 			{
-				return SELF::SPAM;
+				$spam_type = self::SPAM;
 			}
 		}
 		else
 		{
-			return SELF::HAM;
+			$spam_type = self::HAM;
 		}
+		return $spam_type;
 
 	}
 
-	private function send_akismet_query($query, $http_host, $port, &$error_no, &$errstr, $timeout=10)
+	private function send_akismet_query($request, $path, $key='')
 	{
+
+		// Sends an appropriate query to Akismet
+		//
+		// $request - the content, which should be mostly URL encoded
+		// $path - The service to invoke on Akismet and its version, ex: /1.1/verify-key
+		// $key - Your Akismet key
+
+		if ($path == '/1.1/verify-key')
+		{
+			$host = $http_host = 'rest.akismet.com';
+		}
+		else
+		{
+			$host = $http_host = $key . '.rest.akismet.com';
+		}
+
+		$content_length = strlen($request);
+
+		$http_request = "POST {$path} HTTP/1.0\r\n";
+		$http_request .= "Host: {$host}\r\n";
+		$http_request .= "Content-Type: application/x-www-form-urlencoded\r\n";
+		$http_request .= "Content-Length: {$content_length}\r\n";
+		$http_request .= "User-Agent: {$this->user_agent}\r\n";
+		$http_request .= "\r\n";
+		$http_request .= $request;
+
 		// Sends a query to the Akismet API
 		$response = '';
-		$fs = @fsockopen( 'ssl://' . $http_host, $port, $errno, $errstr, 10 );
+		$fs = @fsockopen( 'ssl://' . $http_host, 443, $errno,$errstr,10 );
 		if ($fs != false)
 		{
-			fwrite($fs, $query);
+			fwrite($fs, $http_request);
 			while (!feof($fs))
 			{
 				$response .= fgets($fs,1160); // One TCP-IP packet
@@ -1188,7 +1085,7 @@ class acp_controller
 		return explode("\r\n\r\n", $response,2 );	// Should always return an array with two elements
 	}
 
-	private function delete_post($post_id, $test_mode)
+	private function delete_post($post_id)
 	{
 
 		// This function removes a post, but possibly its topic and the poster's account too. If the first post of a topic is identified by Askismet
@@ -1196,7 +1093,6 @@ class acp_controller
 		// Functions delete_topics and delete_posts are found in /includes/functions_admin.php.
 		//
 		// $post_id = post_id to delete
-		// $test_mode = boolean indicating whether test logic is being requested
 		//
 		// Returns $actions array:
 		//		$actions['topic_removed'] == boolean
@@ -1219,57 +1115,57 @@ class acp_controller
 
 		$result = $this->db->sql_query($sql);
 		$rowset = $this->db->sql_fetchrowset($result);
-		$this->db->sql_freeresult($result);
 
 		if (count($rowset) !== 1)
 		{
 			// If the count is zero, the topic containing the post was probably already removed. The value should never be a
 			// value greater than one, as it would indicate a very messed up database, but if it is, the function exits harmlessly.
 			// Also delete row from the phpbb_spam_found table.
-			$this->delete_spam_found_row($post_id, 1);
-			return false;
-		}
-
-		$topic_id = $rowset[0]['topic_id'];
-		$poster_id = $rowset[0]['poster_id'];
-
-		$delete_topic = (bool) ((int) $rowset[0]['topic_first_post_id'] === (int) $post_id);
-
-		if ($delete_topic)
-		{
-			// Delete the topic containing the spam, including all its posts
-			if (!$test_mode)
-			{
-				delete_topics('topic_id', $topic_id);
-			}
-			$actions['topic_removed'] = true;
+			$actions = false;
 		}
 		else
 		{
-			// Delete just this post. It's assumed other posts in the topic are not identified as spam, at least not yet.
-			if (!$test_mode)
-			{
-				delete_posts('post_id', $post_id);
-				// Also delete row from the phpbb_spam_found table
-				$this->delete_spam_found_row($post_id, 1);
-			}
-			$actions['user_removed'] = false;
-		}
+			$topic_id = $rowset[0]['topic_id'];
+			$poster_id = $rowset[0]['poster_id'];
 
-		// If the poster now has no approved posts, delete their account because they are a filthy spammer!
-		$this->conditionally_delete_user($poster_id, $test_mode);
+			$delete_topic = (bool) ((int) $rowset[0]['topic_first_post_id'] === (int) $post_id);
+
+			if ($delete_topic)
+			{
+				// Delete the topic containing the spam, including all its posts
+				delete_topics('topic_id', $topic_id);
+				$actions['topic_removed'] = true;
+			}
+			else
+			{
+				// Delete just this post. It's assumed other posts in the topic are not identified as spam, at least not yet.
+				delete_posts('post_id', $post_id);
+				$actions['user_removed'] = false;
+			}
+
+			// If the poster now has no approved posts, delete their account because they are a filthy spammer!
+			if ($this->conditionally_delete_user($poster_id))
+			{
+				$actions['user_removed'] = true;
+			}
+		}
+		$this->db->sql_freeresult($result);
+
+		// Remove the row from the phpbb_spam_found table
+		$this->delete_spam_found_row($post_id, 1);
 
 		return $actions;
 
 	}
 
-	private function delete_private_message($msg_id, $test_mode)
+	private function delete_private_message($msg_id)
 	{
 
 		// This function removes a private message from all private message boxes.
 		//
 		// $msg_id = msg_id to be removed
-		// $test_mode = boolean indicating whether test logic is being requested
+		//
+		// Returns # of users whose accounts were removed
 
 		// Get information on who this private message was sent to. This typically includes the author, since a copy goes into their sent box or outbox.
 		$sql_ary = array(
@@ -1288,35 +1184,35 @@ class acp_controller
 		foreach ($rowset as $row)
 		{
 			$author_ids[] = $row['author_id'];
-			if (!$test_mode)
-			{
-				// Delete this copy of the private message
-				delete_pm($row['user_id'], array($msg_id), $row['folder_id']);	// Function is in includes/functions_privmsgs.php.
-				// Also delete row from the phpbb_spam_found table
-				$this->delete_spam_found_row($msg_id, 0);
-			}
+			// Delete this copy of the private message
+			delete_pm($row['user_id'], array($msg_id), $row['folder_id']);	// Function is in includes/functions_privmsgs.php.
 		}
 		$this->db->sql_freeresult($result);
 
-		$author_ids = array_unique($author_ids);
+		// Remove the row from the phpbb_spam_found table
+		$this->delete_spam_found_row($msg_id, 0);
 
-		if (!$test_mode)
+		$users_deleted = 0;
+		$author_ids = array_unique($author_ids);
+		foreach ($author_ids as $author_id)
 		{
-			foreach ($author_ids as $author_id)
+			if ($this->conditionally_delete_user($author_id))
 			{
-				$this->conditionally_delete_user($author_id, $test_mode);
+				$users_deleted++;
 			}
 		}
+		return $users_deleted;
 
 	}
 
-	private function conditionally_delete_user($user_id, $test_mode)
+	private function conditionally_delete_user($user_id)
 	{
 
 		// If the poster or private message author now has no approved posts, delete their account because they are a filthy spammer!
 		//
 		// $user_id = user_id in phpbb_users table
-		// $test_mode = boolean indicating whether test logic is being requested
+		//
+		// Returns if the user was deleted (true | false)
 
 		$sql_ary = array(
 			'SELECT'	=> 'user_posts, user_type',
@@ -1330,24 +1226,28 @@ class acp_controller
 		$result = $this->db->sql_query($sql);
 		$rowset = $this->db->sql_fetchrowset($result);
 		$user_posts = (int) $rowset[0]['user_posts'];
+		$user_deleted = false;
 
 		if ($user_posts === 0)
 		{
 			// Do not remove accounts for any founder, guests, administrator or global moderator
-			if ($rowset[0]['user_type'] !== USER_FOUNDER && $rowset[0]['user_type'] !== ANONYMOUS && $this->is_not_admin_or_moderator($rowset[0]['user_id']))
+			if ($rowset[0]['user_type'] !== USER_FOUNDER && $rowset[0]['user_type'] !== ANONYMOUS && $this->is_not_admin_or_moderator($user_id))
 			{
-				if (!$test_mode)
-				{
-					user_delete('remove', $user_id, false);
-				}
+				user_delete('remove', $user_id, false);	// Function always returns false
+				$user_deleted = true;
 			}
 		}
 		$this->db->sql_freeresult($result);
+		return $user_deleted;
 
 	}
 
 	private function is_not_admin_or_moderator($user_id)
 	{
+
+		// Returns true or false if the user is neither an admin nor a moderator
+		//
+		// $user_id - user_id to test
 
 		// Returns true if the user_id is not for an administrator or global moderator.
 		$sql_ary = array(
@@ -1362,7 +1262,7 @@ class acp_controller
 
 		$result = $this->db->sql_query($sql);
 		$rowset = $this->db->sql_fetchrowset($result);
-		$user_can_be_deleted = (bool) (count($rowset) === 0);
+		$user_can_be_deleted = (bool) count($rowset) === 1;
 		$this->db->sql_freeresult($result);
 
 		return $user_can_be_deleted;
@@ -1382,15 +1282,18 @@ class acp_controller
 			meta_refresh(3, $this->u_action . '&amp;find_type=pms');		// Check private messages next
 		}
 
+		// Should we be in test mode?
+		$test_mode = (bool) $this->config['phpbbservices_spamremover_test_mode'];
+
 		$batch_size = (int) $this->config['phpbbservices_spamremover_batch_size'];
 
 		// Determine the date range, if any, of the posts to check for spam
 		$start_date_str = trim($this->config['phpbbservices_spamremover_posts_start_date']);
 		$end_date_str = trim($this->config['phpbbservices_spamremover_posts_end_date']);
 
-		$date_range = $this->create_start_end_date_sql($start_date_str, $end_date_str);
+		$date_range = $this->create_start_end_date_sql($start_date_str, $end_date_str, 'posts');
 
-		$last_post_id_checked = ((bool) $this->config['phpbbservices_spamremover_find_all_posts'] == 0) ? $this->config['phpbbservices_spamremover_last_post_id'] : 0;
+		$last_post_id_checked = (bool) $this->config['phpbbservices_spamremover_find_all_posts'] == 0 ? $this->config['phpbbservices_spamremover_last_post_id'] : 0;
 
 		// Information on progress is passed as URL parameters. Couldn't get this to work with static variables.
 		$posts_spam_found = $this->request->variable('spam', 0);	// Running total of spam found so far
@@ -1398,7 +1301,7 @@ class acp_controller
 		$posts_to_check = $this->request->variable('to_check', 0);	// Total posts requiring checking. If zero, this is the first pass, so the value is calculated next.
 
 		// Determine total number of posts that need to be checked
-		if ($posts_to_check === 0);
+		if ($posts_to_check === 0)
 		{
 			$sql_ary = array(
 				'SELECT' 	=> 'count(*) AS row_count',
@@ -1407,8 +1310,7 @@ class acp_controller
 					USERS_TABLE => 'u',
 					TOPICS_TABLE => 't',
 					FORUMS_TABLE => 'f'),
-				'WHERE'		=> "p.poster_id = u.user_id AND p.topic_id = t.topic_id AND p.forum_id = f.forum_id $date_range AND p.post_id > " . (int) $last_post_id_checked,
-				'ORDER_BY'	=> 'post_id');
+				'WHERE'		=> "p.poster_id = u.user_id AND p.topic_id = t.topic_id AND p.forum_id = f.forum_id $date_range AND p.post_id > " . (int) $last_post_id_checked);
 			$sql = $this->db->sql_build_query('SELECT', $sql_ary);
 			$result = $this->db->sql_query($sql);
 			$posts_to_check = $this->db->sql_fetchfield('row_count');
@@ -1421,7 +1323,7 @@ class acp_controller
 
 		$sql_ary = array(
 			'SELECT' 	=> 'post_id, post_time, poster_ip, poster_id, post_username, post_text, bbcode_uid, bbcode_bitfield,
-						username, user_email, enable_bbcode, enable_smilies, enable_magic_url, topic_title, forum_name, 
+						username, user_email, enable_bbcode, enable_smilies, enable_magic_url, topic_title, forum_name, f.forum_id, t.topic_id,
 						user_dateformat, topic_first_post_id, topic_posts_approved, topic_posts_unapproved, 
 						topic_posts_softdeleted, topic_first_post_id',
 			'FROM'		=> 	array(
@@ -1437,6 +1339,8 @@ class acp_controller
 		$rowset = $this->db->sql_fetchrowset($result);
 
 		$i = 0;
+		$last_post_id = 0;
+
 		while (still_on_time() && ($i < $batch_size) && ($i < (count($rowset))))
 		{
 
@@ -1445,16 +1349,15 @@ class acp_controller
 				(($rowset[$i]['enable_smilies']) ? OPTION_FLAG_SMILIES : 0) +
 				(($rowset[$i]['enable_magic_url']) ? OPTION_FLAG_LINKS : 0);
 			$post_text = generate_text_for_display(censor_text($rowset[$i]['post_text']), $rowset[$i]['bbcode_uid'], $rowset[$i]['bbcode_bitfield'], $flags);
+			$post_link = sprintf("%sviewtopic.{$this->phpEx}?f=%s&amp;t=%s#p%s", $this->board_url, $rowset[$i]['forum_id'], $rowset[$i]['topic_id'], $rowset[$i]['post_id']);
 
 			// Is this spam?
 			$data = array('blog'                 => $this->board_url,
 						  'user_ip'              => $rowset[$i]['poster_ip'],
-						  'referrer'             => '',
-						  'permalink'            => '',
+						  'permalink'            => $post_link,
 						  'comment_type'         => ($rowset[$i]['post_id'] == $rowset[$i]['topic_first_post_id']) ? 'forum-post' : 'reply',
 						  'comment_author'       => $rowset[$i]['username'],
 						  'comment_author_email' => $rowset[$i]['user_email'],
-						  'comment_author_url'   => '',
 						  'comment_content'      => $post_text,
 						  'comment_date_gmt'     => date('c', $rowset[$i]['post_time']),
 						  'blog_lang'            => $this->config['default_lang'],
@@ -1462,18 +1365,18 @@ class acp_controller
 			);
 
 			// Do an Akismet comment check
-			$spam_type = $this->akismet_comment_check($this->config['phpbbservices_spamremover_akismet_key'], $data, true);
+			$spam_type = $this->akismet_comment_check($this->config['phpbbservices_spamremover_akismet_key'], $data, $test_mode);
 
 			// Note if it was flagged as spam
-			if (in_array($spam_type, array(SELF::SPAM, SELF::BLATANT_SPAM)))
+			if ($spam_type == self::SPAM || $spam_type == self::BLATANT_SPAM)
 			{
 				$posts_spam_found++;
 			}
 
 			// Mark the post with the spam assessment and when it was done
-			if ($spam_type !== SELF::HAM)
+			if ($spam_type !== self::HAM)
 			{
-				$spam_exists = $this->spam_exists($rowset[$i]['post_id'], 1);
+				$spam_exists = $this->spam_exists($rowset[$i]['post_id'],1);
 				if ($spam_exists)
 				{
 					$sql_ary2 = array(
@@ -1482,23 +1385,22 @@ class acp_controller
 					);
 					$sql2 = 'UPDATE ' . $this->spam_found_table . ' SET ' . $this->db->sql_build_array('UPDATE', $sql_ary2) .
 						' WHERE post_msg_id = ' . (int) $rowset[$i]['post_id'] . ' AND is_post = 1';
-					$this->db->sql_query($sql2);
-					if ($this->db->sql_affectedrows() === 0)
-					{
-						$sql_ary2 = array(
-							'is_post'			=> 1,
-							'post_msg_id'		=> (int) $rowset[$i]['post_id'],
-							'is_blatant_spam' 	=> (int) $spam_type,
-							'spam_check_time' 	=> (int) time(),
-						);
-						$sql2 = 'INSERT INTO ' . $this->spam_found_table . $this->db->sql_build_array('INSERT', $sql_ary2);
-						$this->db->sql_query($sql2);
-					}
 				}
+				else
+				{
+					$sql_ary2 = array(
+						'is_post'			=> 1,
+						'post_msg_id'		=> (int) $rowset[$i]['post_id'],
+						'is_blatant_spam' 	=> (int) $spam_type,
+						'spam_check_time' 	=> (int) time(),
+					);
+					$sql2 = 'INSERT INTO ' . $this->spam_found_table . $this->db->sql_build_array('INSERT', $sql_ary2);
+				}
+				$this->db->sql_query($sql2);
 			}
 			else	// It's ham
 			{
-				// Delete from the phpbb_spam_posts table if perhaps it was once judged as spam but isn't anymore.
+				// Delete row from the phpbb_spam_posts table if perhaps it was once judged as spam but isn't anymore.
 				$this->delete_spam_found_row($rowset[$i]['post_id'], 1);
 			}
 
@@ -1522,6 +1424,7 @@ class acp_controller
 			if ($check_pms)
 			{
 				$this->config->set('phpbbservices_spamremover_posts_found', 1); // This value is a flag indicating find posts step has completed
+				$this->config->set('phpbbservices_spamremover_total_post_spam', $posts_spam_found); // Save total spam posts found in the database
 				meta_refresh(3, $this->u_action . '&amp;find_type=pms');	// Check private messages next
 				trigger_error($this->language->lang('ACP_SPAMREMOVER_ALL_POSTS_CHECKED', $posts_spam_found, $posts_to_check));
 			}
@@ -1536,7 +1439,7 @@ class acp_controller
 		else
 		{
 			$percent_done = round((($posts_checked / $posts_to_check) * 100),1);
-			meta_refresh(3, $this->u_action . "&amp;find_type=posts&amp;find_id=$last_post_id&amp;spam=$posts_spam_found&amp;checked=$posts_checked&amp;to_check=$posts_to_check");	// Check next batch of posts
+			meta_refresh(3, $this->u_action . "&amp;find_type=posts&amp;find_id={$last_post_id}&amp;spam={$posts_spam_found}&amp;checked={$posts_checked}&amp;to_check=$posts_to_check");	// Check next batch of posts
 			trigger_error($this->language->lang('ACP_SPAMREMOVER_PARTIAL_POSTS_CHECKED', $posts_spam_found, $posts_checked, ($posts_to_check - $posts_checked), $percent_done) . adm_back_link($this->u_action));
 		}
 
@@ -1556,12 +1459,15 @@ class acp_controller
 
 		$batch_size = (int) $this->config['phpbbservices_spamremover_batch_size'];
 
+		// Should we be in test mode?
+		$test_mode = (bool) $this->config['phpbbservices_spamremover_test_mode'];
+
 		// Determine the date range, if any, of the private messages to check for spam
 		$start_date_str = trim($this->config['phpbbservices_spamremover_pms_start_date']);
 		$end_date_str = trim($this->config['phpbbservices_spamremover_pms_end_date']);
 
-		// Create the SQL to find the correct posts to check
-		$date_range = $this->create_start_end_date_sql($start_date_str, $end_date_str);
+		// Create the SQL to find the correct private messages to check
+		$date_range = $this->create_start_end_date_sql($start_date_str, $end_date_str, 'pms');
 
 		$last_pms_id_checked = ((bool) $this->config['phpbbservices_spamremover_find_all_pms'] == 0) ? $this->config['phpbbservices_spamremover_last_pms_id'] : 0;
 
@@ -1605,6 +1511,8 @@ class acp_controller
 		$rowset = $this->db->sql_fetchrowset($result);
 
 		$i = 0;
+		$last_msg_id = 0;
+
 		while (still_on_time() && ($i < $batch_size) && ($i < (count($rowset))))
 		{
 
@@ -1613,16 +1521,15 @@ class acp_controller
 				(($rowset[$i]['enable_smilies']) ? OPTION_FLAG_SMILIES : 0) +
 				(($rowset[$i]['enable_magic_url']) ? OPTION_FLAG_LINKS : 0);
 			$message_text = generate_text_for_display(censor_text($rowset[$i]['message_text']), $rowset[$i]['user_sig_bbcode_uid'], $rowset[$i]['user_sig_bbcode_bitfield'], $flags);
+			$message_link = sprintf("%sucp.{$this->phpEx}?i=pm&amp;mode=view&amp;p=%s", $this->board_url, $rowset[$i]['msg_id']);
 
 			// Is this spam?
 			$data = array('blog'                 => $this->board_url,
 						  'user_ip'              => $rowset[$i]['author_ip'],
-						  'referrer'             => '',
-						  'permalink'            => '',
+						  'permalink'            => $message_link,
 						  'comment_type'         => 'message',
 						  'comment_author'       => $rowset[$i]['username'],
 						  'comment_author_email' => $rowset[$i]['user_email'],
-						  'comment_author_url'   => '',
 						  'comment_content'      => $message_text,
 						  'comment_date_gmt'     => date('c', $rowset[$i]['message_time']),
 						  'blog_lang'            => $this->config['default_lang'],
@@ -1630,16 +1537,16 @@ class acp_controller
 			);
 
 			// Do an Akismet comment check
-			$spam_type = $this->akismet_comment_check($this->config['phpbbservices_spamremover_akismet_key'], $data, true);
-			if (in_array($spam_type, array(SELF::SPAM, SELF::BLATANT_SPAM)))
+			$spam_type = $this->akismet_comment_check($this->config['phpbbservices_spamremover_akismet_key'], $data, $test_mode);
+			if (in_array($spam_type, array(self::SPAM, self::BLATANT_SPAM)))
 			{
 				$pms_spam_found++;
 			}
 
 			// Mark the private message with the spam assessment and when it was done
-			if ($spam_type !== SELF::HAM)
+			if ($spam_type !== self::HAM)
 			{
-				$spam_exists = $this->spam_exists($rowset[$i]['msg_id'], 0);
+				$spam_exists = $this->spam_exists($rowset[$i]['msg_id'],0);
 				if ($spam_exists)
 				{
 					$sql_ary2 = array(
@@ -1681,6 +1588,7 @@ class acp_controller
 		{
 			// Note in the log the find spam function was run.
 			$this->config->set('phpbbservices_spamremover_posts_found', 0); // This value is a flag indicating find private messages step completed
+			$this->config->set('phpbbservices_spamremover_total_pms_spam', $pms_spam_found); // Save total spam private messages found in the database
 			$this->log->add('admin', $this->user->data['user_id'], $this->user->ip, 'LOG_ACP_SPAMREMOVER_FIND_SPAM_PMS_RAN');
 			trigger_error($this->language->lang('ACP_SPAMREMOVER_ALL_PMS_CHECKED', $pms_spam_found, $pms_to_check) . adm_back_link($this->u_action));
 		}
@@ -1688,7 +1596,7 @@ class acp_controller
 		{
 			$percent_done = round((($pms_checked / $pms_to_check) * 100),1);
 
-			meta_refresh(3, $this->u_action . "&amp;find_type=pms&amp;find_id=$last_msg_id&amp;spam=$pms_spam_found&amp;checked=$pms_checked&amp;to_check=$pms_to_check");	// Check next batch of private messages
+			meta_refresh(3, $this->u_action . "&amp;find_type=pms&amp;find_id={$last_msg_id}&amp;spam={$pms_spam_found}&amp;checked={$pms_checked}&amp;to_check={$pms_to_check}");	// Check next batch of private messages
 			trigger_error($this->language->lang('ACP_SPAMREMOVER_PARTIAL_PMS_CHECKED', $pms_spam_found, $pms_checked, ($pms_to_check - $pms_checked), $percent_done) . adm_back_link($this->u_action));
 		}
 
@@ -1697,6 +1605,10 @@ class acp_controller
 	private function spam_exists($post_msg_id, $is_post)
 	{
 		// Checks to see if a row already exists in the phpbb_spam_found table. Returns true if it exists, false otherwise.
+		//
+		// $post_msg_id - column value in the phpbb_spam_found table
+		// $is_post	- true if row represents a post, false if it represents a private message
+
 		$is_post_value = ($is_post) ? 1 : 0;
 		$sql = 'SELECT * FROM ' . $this->spam_found_table . ' WHERE post_msg_id = ' . (int) $post_msg_id . ' AND is_post = ' . (int) $is_post_value;
 		$result = $this->db->sql_query($sql);
@@ -1707,15 +1619,42 @@ class acp_controller
 	private function delete_spam_found_row($post_msg_id, $is_post)
 	{
 		// Deletes a row in the phpbb_spam_found table if it exists. This can happen if a post or private message was
-		// previously judged by Akismet as spam, but isn't anymore. Or, more typically, if the admin marks a post or private
-		// message as ham.
+		// previously judged by Akismet as spam, but isn't anymore, or, more typically, if the admin marks a post or private
+		// message as ham. This most typically occurs when the bulk spam removal function is called.
+		//
+		// $post_msg_id - column value in the phpbb_spam_found table
+		// $is_post	- true if row represents a post, false if it represents a private message
+
 		$is_post_value = ($is_post) ? 1 : 0;
 		$sql = 'DELETE FROM ' . $this->spam_found_table . ' WHERE post_msg_id = ' . (int) $post_msg_id . ' AND is_post = ' . (int) $is_post_value;
 		$this->db->sql_query($sql);
 	}
 
-	private function create_start_end_date_sql($start_date_str, $end_date_str)
+	private function create_start_end_date_sql($start_date_str, $end_date_str, $type)
 	{
+
+		// Creates a SQL snippet to constrain the rows returned by date
+		//
+		// $start_date_str - start date in ISO 8601 YYYY-MM-DD format
+		// $end_date_str - end date in ISO 8601 YYYY-MM-DD format
+		// $type - posts | pms | summary, depending on context, pms = private messages
+
+		switch ($type)
+		{
+			case 'posts':
+			default:
+				$column = 'post_time';
+			break;
+
+			case 'pms':
+				$column = 'msg_time';
+			break;
+
+			case 'summary':
+				$column = 'spam_check_time';
+			break;
+		}
+
 		// Create the SQL snippet to find the correct posts to check
 		if ($start_date_str == '' && $end_date_str == '')
 		{
@@ -1723,17 +1662,223 @@ class acp_controller
 		}
 		else if ($start_date_str !== '' && $end_date_str == '')
 		{
-			$date_range = ' AND post_time >= ' . strtotime($start_date_str);
+			$date_range = ' AND ' . $column . ' >= ' . strtotime($start_date_str);
 		}
 		else if ($start_date_str == '' && $end_date_str !== '')
 		{
-			$date_range = ' AND post_time <= ' . strtotime($end_date_str);
+			$date_range = ' AND ' . $column . ' <= ' . strtotime($end_date_str . 'T23:59:59');
 		}
 		else
 		{
-			$date_range = ' AND post_time >= ' . strtotime($start_date_str) . ' AND post_time <= ' . strtotime($end_date_str);
+			$date_range = ' AND ' . $column . ' >= ' . strtotime($start_date_str) . ' AND ' . $column . ' <= ' . strtotime($end_date_str . 'T23:59:59');
 		}
 		return $date_range;
+
+	}
+
+	private function estimate_spam_check_time($num_items)
+	{
+		// Returns an array estimating the hours, minutes and seconds it will take for Akismet to process a batch of
+		// posts or private messages assuming a rate of 4 items per second.
+
+		$process_time = array();
+
+		$est_post_seconds = round($num_items/4);
+		$process_time['items_hrs'] = floor($est_post_seconds/3600);
+		$est_post_seconds = ($process_time['items_hrs'] != 0) ? $est_post_seconds % ($process_time['items_hrs'] * 3600) : $est_post_seconds;
+		$process_time['items_min'] = floor($est_post_seconds/60);
+		$process_time['items_sec'] = ($process_time['items_min'] != 0) ? $est_post_seconds % ($process_time['items_min'] * 60) : $est_post_seconds;
+
+		return $process_time;
+	}
+
+	function delete_spam($blatant_only, $initial)
+	{
+
+		// Deletes post and private message spam until either all are processed, the batch size is reached or the still_on_time() function returns false.
+		// If not all posts are processed, a meta refresh happens to process the next batch of posts. If there are no remaining posts to delete, it then
+		// starts deleting any spam private messages. If not all private messages are processed, a meta refresh happens to process the next batch of
+		// private messages. A topic will get deleted if the first post is spam. The poster's account is deleted if there are no posts after spam posts
+		// are removed.
+		//
+		// $blatant_only - if true, only items marked as blatant spam are removed
+		// $initial - true if first time called, otherwise false
+
+		$batch_size = (int) $this->config['phpbbservices_spamremover_batch_size'];
+
+		// Information on progress is passed as URL parameters. Couldn't get this to work with static variables.
+		$posts_removed = (int) $this->request->variable('posts_removed', 0);	// Running total of posts removed so far
+		$pms_removed = (int) $this->request->variable('pms_removed', 0);	// Running total of private messages removed so far
+		$topics_removed = (int) $this->request->variable('topics_removed', 0);	// Running total of topics removed so far
+		$users_removed = (int) $this->request->variable('users_removed', 0);	// Running total of users removed so far
+
+		$blatant_only_sql = ($blatant_only) ? ' AND is_blatant_spam = 1' : '';
+
+		if ($initial)
+		{
+			// Since we are beginning the process of bulk spam removal, let's get a fresh count of the total post and private message spam
+			// so we can accurately report percent complete. Factor in blatant only into the count if that was requested.
+
+			$spam_count = $this->count_remaining_spam($blatant_only, true, false);
+			$this->config->set('phpbbservices_spamremover_total_post_spam', $spam_count);
+
+			$spam_count = $this->count_remaining_spam($blatant_only, false, true);
+			$this->config->set('phpbbservices_spamremover_total_pms_spam', $spam_count);
+		}
+
+		$total_post_spam = (int) $this->config['phpbbservices_spamremover_total_post_spam'];
+		$total_pms_spam = (int) $this->config['phpbbservices_spamremover_total_pms_spam'];
+
+		$starting_spam_total = $total_post_spam + $total_pms_spam;
+
+		// Are there more posts to check?
+		$spam_count = $this->count_remaining_spam($blatant_only, true, false);
+
+		if ($spam_count > 0)
+		{
+
+			// Get the posts to be deleted, up to the limit of $batch_size
+			$sql_ary = array(
+				'SELECT' 	=> 'post_msg_id',
+				'FROM'		=> array($this->spam_found_table => 's'),
+				'WHERE'		=> 'is_post = 1' . $blatant_only_sql);
+			$sql = $this->db->sql_build_query('SELECT', $sql_ary);
+			$result = $this->db->sql_query_limit($sql, $batch_size);
+			$rowset = $this->db->sql_fetchrowset($result);
+
+			$i = 0;
+			while (still_on_time() && ($i < $batch_size) && ($spam_count > 0))
+			{
+
+				// Delete the post
+				$actions = $this->delete_post($rowset[$i]['post_msg_id']);
+
+				if (is_array($actions))
+				{
+					if ($actions['topic_removed'])
+					{
+						$topics_removed++;
+					}
+
+					if ($actions['user_removed'])
+					{
+						$users_removed++;
+					}
+				}
+
+				$i++;
+				$posts_removed++;
+				$spam_count--;
+
+			}
+			$this->db->sql_freeresult($result);
+
+		}
+
+		// Get spam to do (number of rows in phpbb_spam_found_table)
+		$spam_to_do = $this->count_remaining_spam($blatant_only, false, false);
+
+		if ($spam_count > 0)
+		{
+			// Since we finished processing a batch of posts and there are more spam posts to process, redirect and do another batch
+			$percent_done = round((1 - ($spam_to_do / $starting_spam_total)) * 100,1);
+			meta_refresh(3, $this->u_action . "&amp;posts_removed={$posts_removed}&amp;pms_removed={$pms_removed}&amp;topics_removed={$topics_removed}&amp;users_removed={$users_removed}");	// Check next batch of posts
+			trigger_error($this->language->lang('ACP_SPAMREMOVER_SPAM_REMOVED_PROGRESS', $posts_removed, $topics_removed, $users_removed, $pms_removed, $percent_done) . adm_back_link($this->u_action));
+		}
+
+		// Are there more private messages to check?
+		$spam_count = $this->count_remaining_spam($blatant_only, false, true);
+
+		if ($spam_count > 0)
+		{
+
+			// Get the private messages to be deleted, up to the limit of $batch_size
+			$sql_ary = array(
+				'SELECT' 	=> 'post_msg_id',
+				'FROM'		=> array($this->spam_found_table => 's'),
+				'WHERE'		=> 'is_post = 0' . $blatant_only_sql);
+			$sql = $this->db->sql_build_query('SELECT', $sql_ary);
+			$result = $this->db->sql_query_limit($sql, $batch_size);
+			$rowset = $this->db->sql_fetchrowset($result);
+
+			$i = 0;
+			while (still_on_time() && ($i < $batch_size) && ($spam_count > 0))
+			{
+				// Delete the private message
+				if ($this->delete_private_message($rowset[$i]['post_msg_id']))
+				{
+					$users_removed++;
+				}
+				$i++;
+				$pms_removed++;
+				$spam_count--;
+			}
+			$this->db->sql_freeresult($result);
+
+		}
+
+		// Get spam to do (number of rows in phpbb_spam_found_table)
+		$spam_to_do = $this->count_remaining_spam($blatant_only, false, false);
+
+		if ($spam_count > 0)
+		{
+			// Since we finished processing a batch of private messages, there should be more to do, so redirect and do another batch
+			$percent_done = round((1 - ($spam_to_do / $starting_spam_total)) * 100,1);
+			meta_refresh(3, $this->u_action . "&amp;posts_removed={$posts_removed}&amp;pms_removed={$pms_removed}&amp;topics_removed={$topics_removed}&amp;users_removed={$users_removed}");	// Check next batch of private messages
+			trigger_error($this->language->lang('ACP_SPAMREMOVER_SPAM_REMOVED_PROGRESS', $posts_removed, $topics_removed, $users_removed, $pms_removed, $percent_done) . adm_back_link($this->u_action));
+		}
+
+		// Since we are at the end the process of bulk spam removal, let's get a fresh count of the total post and private message spam.
+		// Ideally it will be zero because all were removed. Some may be left if blatant only spam removal was requested.
+		$spam_count = $this->count_remaining_spam($blatant_only, true, false);
+		$this->config->set('phpbbservices_spamremover_total_post_spam', $spam_count);
+
+		$spam_count = $this->count_remaining_spam($blatant_only, false, true);
+		$this->config->set('phpbbservices_spamremover_total_pms_spam', $spam_count);
+
+		// All relevant posts and private messages have been purged, so notify the user
+		trigger_error(sprintf($this->language->lang('ACP_SPAMREMOVER_SPAM_REMOVED'), $posts_removed, $topics_removed, $users_removed, $pms_removed) . adm_back_link($this->u_action));
+
+	}
+
+	private function count_remaining_spam ($blatant_only, $posts_only, $pms_only)
+	{
+		// Returns a count of remaining spam in the phpbb_spam_found table, filtering out non-blatant spam if needed.
+		//
+		// $blatant_only - true if return a blatant spam only count
+		// $posts_only - true if count posts only
+		// $pms_only - true if count private messages only
+
+		$where_clause = array();
+		if ($blatant_only)
+		{
+			$where_clause[] = 'is_blatant_spam = 1';
+		}
+		if ($posts_only && !$pms_only)
+		{
+			$where_clause[] = 'is_post = 1';
+		}
+		if ($pms_only && !$posts_only)
+		{
+			$where_clause[] = 'is_post = 0';
+		}
+
+		$sql_ary = array(
+			'SELECT' 	=> 'count(*) AS spam_count',
+			'FROM'		=> array($this->spam_found_table => 's'));
+
+		if (count($where_clause) > 0)
+		{
+			$sql_ary['WHERE'] = implode(' AND ', $where_clause);
+		}
+		$sql = $this->db->sql_build_query('SELECT', $sql_ary);
+
+		$result = $this->db->sql_query($sql);
+
+		$remaining_spam_count = (int) $this->db->sql_fetchfield('spam_count');
+		$this->db->sql_freeresult($result);
+
+		return $remaining_spam_count;
 	}
 
 }

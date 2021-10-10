@@ -36,9 +36,6 @@ class main_module
 		/** @var \phpbb\language\language $language */
 		$language = $phpbb_container->get('language');
 
-		/** @param \phpbb\request\request	$request	Request object */
-		$request = $phpbb_container->get('request');
-
 		// Load a template from adm/style for our ACP page
 		$this->tpl_name = 'acp_spamremover_body';
 
