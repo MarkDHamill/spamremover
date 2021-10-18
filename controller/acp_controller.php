@@ -60,7 +60,7 @@ class acp_controller
 	 * @param \phpbb\user					$user				User object
 	 *
 	 */
-	public function __construct(\phpbb\config\config $config, \phpbb\language\language $language, \phpbb\log\log $log, \phpbb\request\request $request, \phpbb\template\template $template, \phpbb\user $user, \phpbb\db\driver\factory $db, $php_ext, $phpbb_root_path, $table_prefix, $spam_found_table, \phpbb\pagination $pagination, \phpbb\extension\manager $ext_manager)
+	public function __construct(\phpbb\config\config $config, \phpbb\language\language $language, \phpbb\log\log $log, \phpbb\request\request $request, \phpbb\template\template $template, \phpbb\user $user, \phpbb\db\driver\factory $db, string $php_ext, string $phpbb_root_path, string $table_prefix, string $spam_found_table, \phpbb\pagination $pagination, \phpbb\extension\manager $ext_manager)
 	{
 		// Connect the services
 		$this->config			= $config;
@@ -72,7 +72,7 @@ class acp_controller
 		$this->phpbb_root_path 	= $phpbb_root_path;
 		$this->phpEx			= $php_ext;
 		$this->request			= $request;
-		$this->spam_found_table	= (string) $spam_found_table;
+		$this->spam_found_table	= $spam_found_table;
 
 		$this->table_prefix 	= $table_prefix;
 		$this->template			= $template;
@@ -1231,7 +1231,7 @@ class acp_controller
 		if ($user_posts === 0)
 		{
 			// Do not remove accounts for any founder, guests, administrator or global moderator
-			if ($rowset[0]['user_type'] !== USER_FOUNDER && $rowset[0]['user_type'] !== ANONYMOUS && $this->is_not_admin_or_moderator($user_id))
+			if ($rowset[0]['user_type'] !== USER_FOUNDER && $rowset[0]['user_type'] !== USER_IGNORE && $this->is_not_admin_or_moderator($user_id))
 			{
 				user_delete('remove', $user_id, false);	// Function always returns false
 				$user_deleted = true;
