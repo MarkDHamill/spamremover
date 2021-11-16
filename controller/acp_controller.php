@@ -1647,7 +1647,7 @@ class acp_controller
 			break;
 
 			case 'pms':
-				$column = 'msg_time';
+				$column = 'message_time';
 			break;
 
 			case 'summary':
