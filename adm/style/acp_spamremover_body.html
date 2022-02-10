@@ -99,15 +99,15 @@
 	<tbody>
 	<tr class="row1">
 		<th>{{ lang('POSTS') }}</th>
-		<td style="text-align:center;">{{ ACP_SPAMREMOVER_POSTS_HAM }}</td>
-		<td style="text-align:center;">{{ ACP_SPAMREMOVER_POSTS_SPAM }}</td>
-		<td style="text-align:center;">{{ ACP_SPAMREMOVER_POSTS_BLATANT_SPAM }}</td>
+		<td class="center">{{ ACP_SPAMREMOVER_POSTS_HAM }}</td>
+		<td class="center">{{ ACP_SPAMREMOVER_POSTS_SPAM }}</td>
+		<td class="center">{{ ACP_SPAMREMOVER_POSTS_BLATANT_SPAM }}</td>
 	</tr>
 	<tr class="row2">
 		<th>{{ lang('PRIVATE_MESSAGES') }}</th>
-		<td style="text-align:center;">{{ ACP_SPAMREMOVER_MSGS_HAM }}</td>
-		<td style="text-align:center;">{{ ACP_SPAMREMOVER_MSGS_SPAM }}</td>
-		<td style="text-align:center;">{{ ACP_SPAMREMOVER_MSGS_BLATANT_SPAM }}</td>
+		<td class="center">{{ ACP_SPAMREMOVER_MSGS_HAM }}</td>
+		<td class="center">{{ ACP_SPAMREMOVER_MSGS_SPAM }}</td>
+		<td class="center">{{ ACP_SPAMREMOVER_MSGS_BLATANT_SPAM }}</td>
 	</tr>
 	</tbody>
 </table>
@@ -160,7 +160,7 @@
 		<td>{{ post.FORUM_NAME }}</td>
 		<td>{{ post.TOPIC_TITLE }}</td>
 		<td>{{ post.POST_TEXT }}</td>
-		<td style="text-align:center;"><input type="checkbox" name="p-{{ post.MARK }}"></td>
+		<td class="center"><input type="checkbox" name="p-{{ post.MARK }}"></td>
 	</tr>
 	{% endfor %}
 	</tbody>
@@ -233,7 +233,7 @@
 		<td>{{ pm.AKISMET }}</td>
 		<td>{{ pm.MESSAGE_SUBJECT }}</td>
 		<td>{{ pm.MESSAGE_TEXT }}</td>
-		<td style="text-align:center;"><input type="checkbox" name="m-{{ pm.MARK }}"></td>
+		<td class="center"><input type="checkbox" name="m-{{ pm.MARK }}"></td>
 	</tr>
 	{% endfor %}
 	</tbody>

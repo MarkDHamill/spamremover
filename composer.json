@@ -3,8 +3,8 @@
     "type": "phpbb-extension",
     "description": "Removes spam with a valid Akismet license key",
     "homepage": "https://www.phpbbservices.com/other/spamremover",
-    "version": "1.0.3",
-    "time": "2021-10-09",
+    "version": "1.0.4",
+    "time": "2022-02-10",
     "license": "GPL-2.0-only",
     "authors": [
         {

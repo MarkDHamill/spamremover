@@ -934,7 +934,7 @@ class acp_controller
 
 		// Based on code found here: https://akismet.com/development/api/#submit-ham
 		//
-		// $key = Askismet service authorization key associated with board (12 characters)
+		// $key = Akismet service authorization key associated with board (12 characters)
 		// $data = content of post or private message, rendered as HTML
 		// $test_mode = boolean indicating whether test logic is being requested
 
@@ -975,7 +975,7 @@ class acp_controller
 
 		// Based on Akismet code found here: https://akismet.com/development/api/#comment-check
 		//
-		// $key = Askismet key associated with board (12 characters)
+		// $key = Akismet key associated with board (12 characters)
 		// $data = content of post or private message, rendered as HTML
 		// $test_mode = boolean indicating whether test logic is being requested
 
@@ -996,7 +996,7 @@ class acp_controller
 			$request .= '&is_test=1';
 		}
 
-		// Simulation mode is strictly for development purposes. We need something to show in reports in case nothing is flagged as spam by Akismet.
+		// Simulation mode is strictly for developmental purposes. We need something to show in reports in case nothing is flagged as spam by Akismet.
 		// This constant should normally be set to false. Pass the right stuff to Akismet and it will flag a false response.
 
 		if (self::SIMULATION_MODE)
@@ -1262,7 +1262,7 @@ class acp_controller
 
 		$result = $this->db->sql_query($sql);
 		$rowset = $this->db->sql_fetchrowset($result);
-		$user_can_be_deleted = (bool) count($rowset) === 1;
+		$user_can_be_deleted = ! (bool) (count($rowset) > 0);
 		$this->db->sql_freeresult($result);
 
 		return $user_can_be_deleted;
@@ -1448,7 +1448,7 @@ class acp_controller
 	private function find_spam_pms()
 	{
 
-		// Finds private mesasge spam until either all are processed, the batch size is reached or the still_on_time() function returns false. If the still_on_time()
+		// Finds private message spam until either all are processed, the batch size is reached or the still_on_time() function returns false. If the still_on_time()
 		// function returns false or the batch size is reached, a meta refresh happens to process the next batch of private messages.
 
 		// After finding all requested spam posts, if a configuration value is not set, we don't want to find any spam private messages
@@ -1835,6 +1835,52 @@ class acp_controller
 
 		$spam_count = $this->count_remaining_spam($blatant_only, false, true);
 		$this->config->set('phpbbservices_spamremover_total_pms_spam', $spam_count);
+
+		// Resynchronize statistics. This code is copy and pasted from /includes/acp_main.php and minimally modified
+		// because, strangely, it can't be called as a function.  This is equivalent to pressing the Resynchronise
+		// Statistics button on the main page of the ACP.
+
+		if (!function_exists('update_last_username'))
+		{
+			include($this->phpbb_root_path . 'includes/functions_user.' . $this->phpEx);
+		}
+
+		$sql = 'SELECT COUNT(post_id) AS stat
+					FROM ' . POSTS_TABLE . '
+					WHERE post_visibility = ' . ITEM_APPROVED;
+		$result = $this->db->sql_query($sql);
+		$this->config->set('num_posts', (int) $this->db->sql_fetchfield('stat'), false);
+		$this->db->sql_freeresult($result);
+
+		$sql = 'SELECT COUNT(topic_id) AS stat
+					FROM ' . TOPICS_TABLE . '
+					WHERE topic_visibility = ' . ITEM_APPROVED;
+		$result = $this->db->sql_query($sql);
+		$this->config->set('num_topics', (int) $this->db->sql_fetchfield('stat'), false);
+		$this->db->sql_freeresult($result);
+
+		$sql = 'SELECT COUNT(user_id) AS stat
+					FROM ' . USERS_TABLE . '
+					WHERE user_type IN (' . USER_NORMAL . ',' . USER_FOUNDER . ')';
+		$result = $this->db->sql_query($sql);
+		$this->config->set('num_users', (int) $this->db->sql_fetchfield('stat'), false);
+		$this->db->sql_freeresult($result);
+
+		$sql = 'SELECT COUNT(attach_id) as stat
+					FROM ' . ATTACHMENTS_TABLE . '
+					WHERE is_orphan = 0';
+		$result = $this->db->sql_query($sql);
+		$this->config->set('num_files', (int) $this->db->sql_fetchfield('stat'), false);
+		$this->db->sql_freeresult($result);
+
+		$sql = 'SELECT SUM(filesize) as stat
+					FROM ' . ATTACHMENTS_TABLE . '
+					WHERE is_orphan = 0';
+		$result = $this->db->sql_query($sql);
+		$this->config->set('upload_dir_size', (float) $this->db->sql_fetchfield('stat'), false);
+		$this->db->sql_freeresult($result);
+
+		update_last_username();
 
 		// All relevant posts and private messages have been purged, so notify the user
 		trigger_error(sprintf($this->language->lang('ACP_SPAMREMOVER_SPAM_REMOVED'), $posts_removed, $topics_removed, $users_removed, $pms_removed) . adm_back_link($this->u_action));
